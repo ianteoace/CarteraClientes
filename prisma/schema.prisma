@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model Client {
+  id                 String              @id @default(cuid())
+  workspaceId        String
+  name               String
+  phone              String
+  phoneNormalized    String
+  company            String?
+  notes              String?
+  optIn              Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  clientGroups       ClientGroup[]
+  campaignRecipients CampaignRecipient[]
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, phoneNormalized])
+  @@index([workspaceId])
+}
+
+model Workspace {
+  id          String                @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  members     WorkspaceMember[]
+  clients     Client[]
+  groups      Group[]
+  campaigns   Campaign[]
+  invitations WorkspaceInvitation[]
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  AGENT
+  VIEWER
+}
+
+enum WorkspacePermission {
+  CONTACT_VIEW
+  CONTACT_CREATE
+  CONTACT_EDIT
+  CONTACT_DELETE
+  GROUP_VIEW
+  GROUP_CREATE
+  GROUP_EDIT
+  GROUP_DELETE
+  GROUP_MANAGE_MEMBERS
+  CAMPAIGN_VIEW
+  CAMPAIGN_CREATE
+  CAMPAIGN_EDIT
+  CAMPAIGN_SEND
+  CAMPAIGN_DELETE
+  WORKSPACE_SETTINGS_VIEW
+  WORKSPACE_SETTINGS_EDIT
+  TEAM_VIEW
+  TEAM_MANAGE
+  PERMISSIONS_MANAGE
+}
+
+enum GroupScopeMode {
+  ALL
+  SELECTED
+}
+
+model WorkspaceMember {
+  id                  String                @id @default(cuid())
+  workspaceId         String
+  userId              String
+  role                WorkspaceRole         @default(VIEWER)
+  groupScopeMode      GroupScopeMode        @default(ALL)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  workspace           Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  permissionOverrides MemberPermission[]
+  groupAccess         MemberGroupAccess[]
+  sentInvitations     WorkspaceInvitation[] @relation("InvitedByMember")
+  acceptedInvitations WorkspaceInvitation[] @relation("AcceptedMember")
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model MemberPermission {
+  id         String              @id @default(cuid())
+  memberId   String
+  permission WorkspacePermission
+  allowed    Boolean
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  member     WorkspaceMember     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, permission])
+}
+
+model MemberGroupAccess {
+  id        String          @id @default(cuid())
+  memberId  String
+  groupId   String
+  createdAt DateTime        @default(now())
+  member    WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  group     Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, groupId])
+  @@index([groupId])
+}
+
+model Group {
+  id               String                           @id @default(cuid())
+  workspaceId      String
+  name             String
+  description      String?
+  createdAt        DateTime                         @default(now())
+  updatedAt        DateTime                         @updatedAt
+  clientGroups     ClientGroup[]
+  sourceCampaigns  Campaign[]                       @relation("SourceGroupCampaigns")
+  memberAccess     MemberGroupAccess[]
+  invitationAccess WorkspaceInvitationGroupAccess[]
+  workspace        Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model WorkspaceInvitation {
+  id                String                           @id @default(cuid())
+  workspaceId       String
+  email             String
+  role              WorkspaceRole
+  groupScopeMode    GroupScopeMode                   @default(SELECTED)
+  tokenHash         String                           @unique
+  invitedByMemberId String?
+  acceptedMemberId  String?
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  acceptedByUserId  String?
+  revokedAt         DateTime?
+  emailAttemptedAt  DateTime?
+  emailSentAt       DateTime?
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
+  workspace         Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedByMember   WorkspaceMember?                 @relation("InvitedByMember", fields: [invitedByMemberId], references: [id], onDelete: SetNull)
+  acceptedMember    WorkspaceMember?                 @relation("AcceptedMember", fields: [acceptedMemberId], references: [id], onDelete: SetNull)
+  groupAccess       WorkspaceInvitationGroupAccess[]
+
+  @@index([workspaceId, email])
+  @@index([acceptedMemberId])
+}
+
+model WorkspaceInvitationGroupAccess {
+  id           String              @id @default(cuid())
+  invitationId String
+  groupId      String
+  invitation   WorkspaceInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  group        Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([invitationId, groupId])
+  @@index([groupId])
+}
+
+model ClientGroup {
+  clientId  String
+  groupId   String
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, groupId])
+  @@index([groupId])
+}
+
+enum CampaignStatus {
+  DRAFT
+  READY
+  SENDING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+enum RecipientStatus {
+  PENDING
+  PROCESSING
+  ACCEPTED
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Campaign {
+  id            String              @id @default(cuid())
+  workspaceId   String
+  name          String
+  message       String
+  status        CampaignStatus      @default(DRAFT)
+  sourceGroupId String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  sourceGroup   Group?              @relation("SourceGroupCampaigns", fields: [sourceGroupId], references: [id], onDelete: SetNull)
+  recipients    CampaignRecipient[]
+  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceGroupId])
+  @@index([workspaceId])
+}
+
+model CampaignRecipient {
+  id                String          @id @default(cuid())
+  campaignId        String
+  clientId          String?
+  nameSnapshot      String
+  phoneSnapshot     String
+  status            RecipientStatus @default(PENDING)
+  providerMessageId String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  errorMessage      String?
+  createdAt         DateTime        @default(now())
+  campaign          Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  client            Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, phoneSnapshot])
+  @@index([campaignId, status])
+  @@index([clientId])
+}

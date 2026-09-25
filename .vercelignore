@@ -1,0 +1,6 @@
+.env
+.env.*
+.neon
+.vercel
+.agents
+.codex
