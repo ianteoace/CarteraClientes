@@ -19,16 +19,22 @@ export async function listWorkspaceActivity(context: AuthorizationContext, filte
   const where: Prisma.ActivityWhereInput = { workspaceId: context.workspaceId, ...(entityType ? { entityType } : {}) };
 
   if (!hasAllGroups(context)) {
-    const [groupIds, clients] = await Promise.all([
+    const [groupIds, clients, cases] = await Promise.all([
       getAccessibleGroupIds(context),
       prisma.client.findMany({ where: getClientScopeFilter(context), select: { id: true } }),
+      prisma.case.findMany({
+        where: { workspaceId: context.workspaceId, contact: { is: getClientScopeFilter(context) } },
+        select: { id: true },
+      }),
     ]);
     const clientIds = clients.map(({ id }) => id);
+    const caseIds = cases.map(({ id }) => id);
     where.AND = [{
       OR: [
-        { entityType: { notIn: [ACTIVITY_ENTITY.CONTACT, ACTIVITY_ENTITY.GROUP] } },
+        { entityType: { notIn: [ACTIVITY_ENTITY.CONTACT, ACTIVITY_ENTITY.GROUP, ACTIVITY_ENTITY.CASE] } },
         { entityType: ACTIVITY_ENTITY.CONTACT, entityId: { in: clientIds } },
         { entityType: ACTIVITY_ENTITY.GROUP, entityId: { in: groupIds } },
+        { entityType: ACTIVITY_ENTITY.CASE, entityId: { in: caseIds } },
       ],
     }];
   }

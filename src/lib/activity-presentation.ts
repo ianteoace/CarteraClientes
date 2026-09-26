@@ -47,10 +47,15 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.INVITATION_RESENT: return `reenvió la invitación para ${text(metadata, "email") ?? "un miembro"}`;
     case ACTIVITY_ACTION.INVITATION_REVOKED: return `revocó la invitación para ${text(metadata, "email") ?? "un miembro"}`;
     case ACTIVITY_ACTION.INVITATION_ACCEPTED: return `aceptó la invitación para ${text(metadata, "email") ?? "un miembro"}`;
+    case ACTIVITY_ACTION.CASE_CREATED: return `creó el caso #${metadata.number ?? "-"}: ${text(metadata, "title") ?? "sin título"}`;
+    case ACTIVITY_ACTION.CASE_UPDATED: return `actualizó el caso #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CASE_STATUS_CHANGED: return `cambió el estado del caso #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CASE_CLOSED: return `cerró el caso #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CASE_REOPENED: return `reabrió el caso #${metadata.number ?? "-"}`;
     default: return "realizó una acción en la cartera";
   }
 }
 
 export function activityEntityLabel(entityType: string) {
-  return ({ CONTACT: "Contacto", GROUP: "Grupo", CAMPAIGN: "Campaña", WORKSPACE: "Configuración", MEMBER: "Equipo", INVITATION: "Invitación" } as Record<string, string>)[entityType] ?? "Actividad";
+  return ({ CONTACT: "Contacto", GROUP: "Grupo", CAMPAIGN: "Campaña", WORKSPACE: "Configuración", MEMBER: "Equipo", INVITATION: "Invitación", CASE: "Caso" } as Record<string, string>)[entityType] ?? "Actividad";
 }

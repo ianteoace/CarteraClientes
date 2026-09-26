@@ -21,6 +21,7 @@ model Client {
   updatedAt          DateTime            @updatedAt
   clientGroups       ClientGroup[]
   campaignRecipients CampaignRecipient[]
+  cases              Case[]
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, phoneNormalized])
@@ -39,6 +40,8 @@ model Workspace {
   campaigns   Campaign[]
   invitations WorkspaceInvitation[]
   activities  Activity[]
+  cases       Case[]
+  sequence    WorkspaceSequence?
 }
 
 enum WorkspaceRole {
@@ -89,9 +92,42 @@ model WorkspaceMember {
   sentInvitations     WorkspaceInvitation[] @relation("InvitedByMember")
   acceptedInvitations WorkspaceInvitation[] @relation("AcceptedMember")
   activities          Activity[]            @relation("ActivityActor")
+  createdCases        Case[]                @relation("CaseCreator")
 
   @@unique([workspaceId, userId])
   @@index([userId])
+}
+
+model WorkspaceSequence {
+  workspaceId    String    @id
+  caseNextNumber Int       @default(1)
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Case {
+  id                String           @id @default(cuid())
+  workspaceId       String
+  number            Int
+  contactId         String?
+  type              String
+  title             String
+  description       String?
+  status            String
+  priority          String?
+  createdByMemberId String?
+  createdByUserId   String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  closedAt          DateTime?
+  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact           Client?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdByMember   WorkspaceMember? @relation("CaseCreator", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, type, createdAt])
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, contactId, createdAt])
+  @@index([createdByMemberId])
 }
 
 model Activity {
