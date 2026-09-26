@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AuthNavigation } from "@/components/auth/auth-navigation";
 import { getCurrentUser } from "@/lib/auth/server";
-import { getAuthorizationContextIfAvailable, hasPermission } from "@/lib/authorization";
+import { getAuthorizationContextIfAvailable, hasAllGroups, hasPermission } from "@/lib/authorization";
 import { WorkspacePermission } from "@prisma/client";
 import "./globals.css";
 
@@ -20,6 +20,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     groups: hasPermission(context, WorkspacePermission.GROUP_VIEW),
     campaigns: hasPermission(context, WorkspacePermission.CAMPAIGN_VIEW),
     tickets: hasPermission(context, WorkspacePermission.TICKET_VIEW),
+    incidents: hasPermission(context, WorkspacePermission.INCIDENT_VIEW) && hasAllGroups(context),
     team: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     activity: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     settings: hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_VIEW),

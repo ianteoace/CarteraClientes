@@ -16,7 +16,15 @@ export async function listWorkspaceActivity(context: AuthorizationContext, filte
   requirePermission(context, WorkspacePermission.TEAM_VIEW);
   const safePage = Number.isSafeInteger(page) && page > 0 ? Math.min(page, 1000) : 1;
   const entityType = ACTIVITY_FILTERS[filter];
-  const where: Prisma.ActivityWhereInput = { workspaceId: context.workspaceId, ...(entityType ? { entityType } : {}) };
+  const caseSubtype = filter === "tickets" ? "TICKET" : filter === "incidencias" ? "INCIDENT" : null;
+  const where: Prisma.ActivityWhereInput = {
+    workspaceId: context.workspaceId,
+    ...(entityType ? { entityType } : {}),
+    ...(caseSubtype ? { AND: [{ OR: [
+      { action: { startsWith: caseSubtype === "TICKET" ? "TICKET_" : "INCIDENT_" } },
+      { metadata: { path: ["type"], equals: caseSubtype } },
+    ] }] } : {}),
+  };
 
   if (!hasAllGroups(context)) {
     const [groupIds, clients, cases] = await Promise.all([
@@ -29,14 +37,15 @@ export async function listWorkspaceActivity(context: AuthorizationContext, filte
     ]);
     const clientIds = clients.map(({ id }) => id);
     const caseIds = cases.map(({ id }) => id);
-    where.AND = [{
+    const privacyFilter: Prisma.ActivityWhereInput = {
       OR: [
         { entityType: { notIn: [ACTIVITY_ENTITY.CONTACT, ACTIVITY_ENTITY.GROUP, ACTIVITY_ENTITY.CASE] } },
         { entityType: ACTIVITY_ENTITY.CONTACT, entityId: { in: clientIds } },
         { entityType: ACTIVITY_ENTITY.GROUP, entityId: { in: groupIds } },
         { entityType: ACTIVITY_ENTITY.CASE, entityId: { in: caseIds } },
       ],
-    }];
+    };
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), privacyFilter];
   }
 
   const [items, total] = await Promise.all([

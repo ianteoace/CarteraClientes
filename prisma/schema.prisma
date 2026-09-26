@@ -72,6 +72,11 @@ enum WorkspacePermission {
   TICKET_EDIT
   TICKET_ASSIGN
   TICKET_RESOLVE
+  INCIDENT_VIEW
+  INCIDENT_CREATE
+  INCIDENT_EDIT
+  INCIDENT_ASSIGN
+  INCIDENT_RESOLVE
   WORKSPACE_SETTINGS_VIEW
   WORKSPACE_SETTINGS_EDIT
   TEAM_VIEW
@@ -85,24 +90,29 @@ enum GroupScopeMode {
 }
 
 model WorkspaceMember {
-  id                      String                @id @default(cuid())
-  workspaceId             String
-  userId                  String
-  role                    WorkspaceRole         @default(VIEWER)
-  groupScopeMode          GroupScopeMode        @default(ALL)
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
-  workspace               Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  permissionOverrides     MemberPermission[]
-  groupAccess             MemberGroupAccess[]
-  sentInvitations         WorkspaceInvitation[] @relation("InvitedByMember")
-  acceptedInvitations     WorkspaceInvitation[] @relation("AcceptedMember")
-  activities              Activity[]            @relation("ActivityActor")
-  createdCases            Case[]                @relation("CaseCreator")
-  assignedTickets         TicketDetails[]       @relation("TicketAssignee")
-  ticketParticipations    TicketParticipant[]   @relation("TicketParticipantMember")
-  addedTicketParticipants TicketParticipant[]   @relation("TicketParticipantAdder")
-  ticketNotes             TicketNote[]          @relation("TicketNoteAuthor")
+  id                        String                @id @default(cuid())
+  workspaceId               String
+  userId                    String
+  role                      WorkspaceRole         @default(VIEWER)
+  groupScopeMode            GroupScopeMode        @default(ALL)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  workspace                 Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  permissionOverrides       MemberPermission[]
+  groupAccess               MemberGroupAccess[]
+  sentInvitations           WorkspaceInvitation[] @relation("InvitedByMember")
+  acceptedInvitations       WorkspaceInvitation[] @relation("AcceptedMember")
+  activities                Activity[]            @relation("ActivityActor")
+  createdCases              Case[]                @relation("CaseCreator")
+  assignedTickets           TicketDetails[]       @relation("TicketAssignee")
+  ticketParticipations      TicketParticipant[]   @relation("TicketParticipantMember")
+  addedTicketParticipants   TicketParticipant[]   @relation("TicketParticipantAdder")
+  ticketNotes               TicketNote[]          @relation("TicketNoteAuthor")
+  assignedIncidents         IncidentDetails[]     @relation("IncidentAssignee")
+  incidentParticipations    IncidentParticipant[] @relation("IncidentParticipantMember")
+  addedIncidentParticipants IncidentParticipant[] @relation("IncidentParticipantAdder")
+  incidentNotes             IncidentNote[]        @relation("IncidentNoteAuthor")
+  linkedIncidentTickets     IncidentTicket[]      @relation("IncidentTicketLinker")
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -115,26 +125,31 @@ model WorkspaceSequence {
 }
 
 model Case {
-  id                 String              @id @default(cuid())
-  workspaceId        String
-  number             Int
-  contactId          String?
-  type               String
-  title              String
-  description        String?
-  status             String
-  priority           String?
-  createdByMemberId  String?
-  createdByUserId    String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  closedAt           DateTime?
-  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  contact            Client?             @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  createdByMember    WorkspaceMember?    @relation("CaseCreator", fields: [createdByMemberId], references: [id], onDelete: SetNull)
-  ticketDetails      TicketDetails?
-  ticketParticipants TicketParticipant[]
-  ticketNotes        TicketNote[]
+  id                   String                @id @default(cuid())
+  workspaceId          String
+  number               Int
+  contactId            String?
+  type                 String
+  title                String
+  description          String?
+  status               String
+  priority             String?
+  createdByMemberId    String?
+  createdByUserId      String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  closedAt             DateTime?
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact              Client?               @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdByMember      WorkspaceMember?      @relation("CaseCreator", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+  ticketDetails        TicketDetails?
+  ticketParticipants   TicketParticipant[]
+  ticketNotes          TicketNote[]
+  incidentDetails      IncidentDetails?
+  incidentParticipants IncidentParticipant[]
+  incidentNotes        IncidentNote[]
+  incidentTicketLinks  IncidentTicket[]      @relation("IncidentCaseLinks")
+  ticketIncidentLinks  IncidentTicket[]      @relation("TicketCaseLinks")
 
   @@unique([workspaceId, number])
   @@index([workspaceId, type, createdAt])
@@ -186,6 +201,65 @@ model TicketNote {
 
   @@index([caseId, createdAt])
   @@index([authorMemberId])
+}
+
+model IncidentDetails {
+  id               String           @id @default(cuid())
+  caseId           String           @unique
+  assignedMemberId String?
+  resolution       String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  case             Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  assignedMember   WorkspaceMember? @relation("IncidentAssignee", fields: [assignedMemberId], references: [id], onDelete: SetNull)
+
+  @@index([assignedMemberId])
+}
+
+model IncidentParticipant {
+  id              String           @id @default(cuid())
+  caseId          String
+  memberId        String?
+  memberUserId    String
+  addedByMemberId String?
+  addedByUserId   String?
+  createdAt       DateTime         @default(now())
+  case            Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  member          WorkspaceMember? @relation("IncidentParticipantMember", fields: [memberId], references: [id], onDelete: SetNull)
+  addedByMember   WorkspaceMember? @relation("IncidentParticipantAdder", fields: [addedByMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([caseId, memberId])
+  @@index([memberId])
+  @@index([addedByMemberId])
+}
+
+model IncidentNote {
+  id             String           @id @default(cuid())
+  caseId         String
+  authorMemberId String?
+  authorUserId   String?
+  body           String
+  createdAt      DateTime         @default(now())
+  case           Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorMember   WorkspaceMember? @relation("IncidentNoteAuthor", fields: [authorMemberId], references: [id], onDelete: SetNull)
+
+  @@index([caseId, createdAt])
+  @@index([authorMemberId])
+}
+
+model IncidentTicket {
+  incidentCaseId   String
+  ticketCaseId     String
+  linkedByMemberId String?
+  linkedByUserId   String?
+  createdAt        DateTime         @default(now())
+  incidentCase     Case             @relation("IncidentCaseLinks", fields: [incidentCaseId], references: [id], onDelete: Cascade)
+  ticketCase       Case             @relation("TicketCaseLinks", fields: [ticketCaseId], references: [id], onDelete: Cascade)
+  linkedByMember   WorkspaceMember? @relation("IncidentTicketLinker", fields: [linkedByMemberId], references: [id], onDelete: SetNull)
+
+  @@id([incidentCaseId, ticketCaseId])
+  @@index([ticketCaseId])
+  @@index([linkedByMemberId])
 }
 
 model Activity {

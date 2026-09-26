@@ -41,6 +41,32 @@ export function canTransitionTicketStatus(from: TicketStatus, to: TicketStatus) 
   return from !== to && TICKET_STATUS_TRANSITIONS[from].includes(to);
 }
 
+export const INCIDENT_STATUS = {
+  OPEN: "OPEN",
+  INVESTIGATING: "INVESTIGATING",
+  MONITORING: "MONITORING",
+  RESOLVED: "RESOLVED",
+  CLOSED: "CLOSED",
+} as const;
+
+export type IncidentStatus = typeof INCIDENT_STATUS[keyof typeof INCIDENT_STATUS];
+
+export const INCIDENT_STATUS_TRANSITIONS: Record<IncidentStatus, readonly IncidentStatus[]> = {
+  OPEN: [INCIDENT_STATUS.INVESTIGATING, INCIDENT_STATUS.CLOSED],
+  INVESTIGATING: [INCIDENT_STATUS.OPEN, INCIDENT_STATUS.MONITORING, INCIDENT_STATUS.RESOLVED, INCIDENT_STATUS.CLOSED],
+  MONITORING: [INCIDENT_STATUS.INVESTIGATING, INCIDENT_STATUS.RESOLVED, INCIDENT_STATUS.CLOSED],
+  RESOLVED: [INCIDENT_STATUS.INVESTIGATING, INCIDENT_STATUS.CLOSED],
+  CLOSED: [INCIDENT_STATUS.OPEN, INCIDENT_STATUS.INVESTIGATING],
+};
+
+export function isIncidentStatus(value: unknown): value is IncidentStatus {
+  return typeof value === "string" && Object.values(INCIDENT_STATUS).includes(value as IncidentStatus);
+}
+
+export function canTransitionIncidentStatus(from: IncidentStatus, to: IncidentStatus) {
+  return from !== to && INCIDENT_STATUS_TRANSITIONS[from].includes(to);
+}
+
 export const CASE_PRIORITY = {
   LOW: "LOW",
   NORMAL: "NORMAL",
@@ -52,14 +78,17 @@ export type CasePriority = typeof CASE_PRIORITY[keyof typeof CASE_PRIORITY];
 
 const CASE_STATUS_BY_TYPE: Partial<Record<CaseType, readonly string[]>> = {
   [CASE_TYPE.TICKET]: Object.values(TICKET_STATUS),
+  [CASE_TYPE.INCIDENT]: Object.values(INCIDENT_STATUS),
 };
 
 const CASE_INITIAL_STATUS_BY_TYPE: Partial<Record<CaseType, string>> = {
   [CASE_TYPE.TICKET]: TICKET_STATUS.OPEN,
+  [CASE_TYPE.INCIDENT]: INCIDENT_STATUS.OPEN,
 };
 
 const CLOSED_CASE_STATUS_BY_TYPE: Partial<Record<CaseType, ReadonlySet<string>>> = {
   [CASE_TYPE.TICKET]: new Set([TICKET_STATUS.RESOLVED, TICKET_STATUS.CLOSED]),
+  [CASE_TYPE.INCIDENT]: new Set([INCIDENT_STATUS.RESOLVED, INCIDENT_STATUS.CLOSED]),
 };
 
 export function isCaseType(value: unknown): value is CaseType {

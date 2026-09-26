@@ -55,6 +55,16 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Incidencias",
+    permissions: [
+      [WorkspacePermission.INCIDENT_VIEW, "Ver"],
+      [WorkspacePermission.INCIDENT_CREATE, "Crear"],
+      [WorkspacePermission.INCIDENT_EDIT, "Editar"],
+      [WorkspacePermission.INCIDENT_ASSIGN, "Asignar y gestionar participantes"],
+      [WorkspacePermission.INCIDENT_RESOLVE, "Cambiar estado y resolución"],
+    ],
+  },
+  {
     title: "Equipo",
     permissions: [
       [WorkspacePermission.TEAM_VIEW, "Ver"],

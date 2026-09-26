@@ -9,6 +9,8 @@ import { isTicketStatus } from "@/lib/case-types";
 import { describeTicketTimeline, ticketActorLabel } from "@/lib/ticket-presentation";
 import { getEligibleTicketMembers, getTicket, getTicketTimeline, ticketMemberLabel } from "@/lib/ticket-service";
 import { TICKET_PRIORITY_LABELS, TICKET_STATUS_LABELS } from "@/lib/ticket-labels";
+import { getRelatedIncidentsForTicket } from "@/lib/incident-service";
+import { INCIDENT_STATUS_LABELS } from "@/lib/incident-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +21,11 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ n
   const ticket = await getTicket(context, parsed);
   if (!ticket || !isTicketStatus(ticket.status)) notFound();
   const canAssign = hasPermission(context, WorkspacePermission.TICKET_ASSIGN);
-  const [timeline, members, user] = await Promise.all([
+  const [timeline, members, user, relatedIncidents] = await Promise.all([
     getTicketTimeline(context, ticket.number),
     canAssign ? getEligibleTicketMembers(context, ticket.contactId) : Promise.resolve([]),
     getCurrentUser(),
+    getRelatedIncidentsForTicket(context, ticket.id),
   ]);
   const participants = ticket.ticketParticipants.map((participant) => ({
     id: participant.id,
@@ -40,6 +43,8 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ n
 
     {!hasPermission(context, WorkspacePermission.TICKET_EDIT) ? <section className="border-t border-border pt-6"><h2 className="text-lg font-semibold">Problemática</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted">{ticket.description ?? "Sin descripción."}</p></section> : null}
     {!hasPermission(context, WorkspacePermission.TICKET_RESOLVE) ? <section className="border-t border-border pt-6"><h2 className="text-lg font-semibold">Resolución</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted">{ticket.ticketDetails.resolution ?? "Sin resolución."}</p></section> : null}
+
+    {relatedIncidents.length ? <section className="mt-8 border-t border-border pt-6"><h2 className="text-lg font-semibold">Incidencias relacionadas</h2><div className="mt-4 divide-y divide-border border-y border-border">{relatedIncidents.map((incident) => <Link className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm hover:underline" href={`/incidencias/${incident.number}`} key={incident.id}><span><strong>#{incident.number}</strong> {incident.title}</span><span className="text-muted">{INCIDENT_STATUS_LABELS[incident.status as keyof typeof INCIDENT_STATUS_LABELS] ?? incident.status}</span></Link>)}</div></section> : null}
 
     <section className="mt-8 border-t border-border pt-6"><h2 className="text-lg font-semibold">Notas internas</h2><div className="mt-4 divide-y divide-border border-y border-border">{ticket.ticketNotes.length ? ticket.ticketNotes.map((note) => <article className="py-4" key={note.id}><div className="flex flex-wrap justify-between gap-2"><p className="text-sm font-semibold">{note.authorMember ? ticketMemberLabel(note.authorMember) : note.authorUserId ? `Usuario ${note.authorUserId.slice(0, 8)}…` : "Miembro anterior"}</p><time className="text-xs text-muted">{note.createdAt.toLocaleString("es-AR", { dateStyle: "medium", timeStyle: "short" })}</time></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{note.body}</p></article>) : <p className="py-4 text-sm text-muted">Sin notas internas.</p>}</div></section>
 

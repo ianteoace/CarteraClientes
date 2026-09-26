@@ -164,11 +164,11 @@ export async function createTicket(context: AuthorizationContext, input: CreateT
       });
     }
     if (assignedMemberId) {
-      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.TICKET_ASSIGNED, metadata: { number: created.number, target: ticketActivityTarget(candidates.get(assignedMemberId)!) } }, transaction);
+      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.TICKET_ASSIGNED, metadata: { type: CASE_TYPE.TICKET, number: created.number, target: ticketActivityTarget(candidates.get(assignedMemberId)!) } }, transaction);
     }
     const additionalParticipants = participantIds.filter((id) => id !== assignedMemberId);
     if (additionalParticipants.length) {
-      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.TICKET_PARTICIPANTS_ADDED, metadata: { number: created.number, count: additionalParticipants.length } }, transaction);
+      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.TICKET_PARTICIPANTS_ADDED, metadata: { type: CASE_TYPE.TICKET, number: created.number, count: additionalParticipants.length } }, transaction);
     }
     return findTicketById(context, created.id, transaction);
   }, { maxWait: 20_000, timeout: 30_000 });
@@ -223,7 +223,7 @@ export async function assignTicket(context: AuthorizationContext, id: string, me
       data: [{ caseId: ticket.id, memberId: requestedMemberId, memberUserId: member.userId, addedByMemberId: context.memberId, addedByUserId: context.userId }],
       skipDuplicates: true,
     });
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_ASSIGNED, metadata: { number: ticket.number, target: ticketActivityTarget(member) } }, transaction);
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_ASSIGNED, metadata: { type: CASE_TYPE.TICKET, number: ticket.number, target: ticketActivityTarget(member) } }, transaction);
     return findTicketById(context, ticket.id, transaction);
   });
 }
@@ -235,7 +235,7 @@ export async function unassignTicket(context: AuthorizationContext, id: string) 
     if (!ticket) return null;
     if (!ticket.ticketDetails.assignedMemberId) return ticket;
     await transaction.ticketDetails.update({ where: { caseId: ticket.id }, data: { assignedMemberId: null } });
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_UNASSIGNED, metadata: { number: ticket.number } }, transaction);
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_UNASSIGNED, metadata: { type: CASE_TYPE.TICKET, number: ticket.number } }, transaction);
     return findTicketById(context, ticket.id, transaction);
   });
 }
@@ -255,7 +255,7 @@ export async function addTicketParticipants(context: AuthorizationContext, id: s
         data: toCreate.map((memberId) => ({ caseId: ticket.id, memberId, memberUserId: candidates.get(memberId)!.userId, addedByMemberId: context.memberId, addedByUserId: context.userId })),
         skipDuplicates: true,
       });
-      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_PARTICIPANTS_ADDED, metadata: { number: ticket.number, count: toCreate.length } }, transaction);
+      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_PARTICIPANTS_ADDED, metadata: { type: CASE_TYPE.TICKET, number: ticket.number, count: toCreate.length } }, transaction);
     }
     return { added: toCreate.length, unchanged: requestedIds.length - toCreate.length };
   });
@@ -270,7 +270,7 @@ export async function removeTicketParticipant(context: AuthorizationContext, id:
     const participant = ticket.ticketParticipants.find((item) => item.memberId === memberId);
     if (!participant) return { removed: false };
     await transaction.ticketParticipant.delete({ where: { id: participant.id } });
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_PARTICIPANTS_REMOVED, metadata: { number: ticket.number, count: 1 } }, transaction);
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_PARTICIPANTS_REMOVED, metadata: { type: CASE_TYPE.TICKET, number: ticket.number, count: 1 } }, transaction);
     return { removed: true };
   });
 }
@@ -283,7 +283,7 @@ export async function updateTicketResolution(context: AuthorizationContext, id: 
     if (!ticket) return null;
     if (ticket.ticketDetails.resolution === resolution) return ticket;
     await transaction.ticketDetails.update({ where: { caseId: ticket.id }, data: { resolution } });
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_RESOLUTION_UPDATED, metadata: { number: ticket.number } }, transaction);
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_RESOLUTION_UPDATED, metadata: { type: CASE_TYPE.TICKET, number: ticket.number } }, transaction);
     return findTicketById(context, ticket.id, transaction);
   });
 }
@@ -303,7 +303,7 @@ export async function changeTicketStatus(context: AuthorizationContext, id: stri
     }
     if (resolutionInput !== undefined && resolution !== ticket.ticketDetails.resolution) {
       await transaction.ticketDetails.update({ where: { caseId: ticket.id }, data: { resolution } });
-      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_RESOLUTION_UPDATED, metadata: { number: ticket.number } }, transaction);
+      await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_RESOLUTION_UPDATED, metadata: { type: CASE_TYPE.TICKET, number: ticket.number } }, transaction);
     }
     await changeCaseStatusInTransaction(context, ticket.id, nextStatus, transaction);
     return findTicketById(context, ticket.id, transaction);
@@ -317,7 +317,7 @@ export async function addTicketNote(context: AuthorizationContext, id: string, v
     const ticket = ensureTicketShape(await findTicketById(context, id, transaction));
     if (!ticket) return null;
     const note = await transaction.ticketNote.create({ data: { caseId: ticket.id, authorMemberId: context.memberId, authorUserId: context.userId, body } });
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_NOTE_ADDED, metadata: { noteId: note.id, number: ticket.number } }, transaction);
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: ticket.id, action: ACTIVITY_ACTION.TICKET_NOTE_ADDED, metadata: { type: CASE_TYPE.TICKET, noteId: note.id, number: ticket.number } }, transaction);
     return note;
   });
 }

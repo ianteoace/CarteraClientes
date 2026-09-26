@@ -102,6 +102,7 @@ export async function createCaseInTransaction(
   const title = normalizedTitle(input.title);
   const description = normalizedDescription(input.description);
   const requestedContactId = input.contactId?.trim() || null;
+  if (type === "INCIDENT" && requestedContactId) throw new CaseValidationError("Las incidencias no admiten un contacto individual.");
 
   await validateActor(transaction, context);
   const contactId = await validateContact(transaction, context, requestedContactId);
@@ -155,12 +156,13 @@ export async function updateCaseCoreInTransaction(
   if (input.priority !== undefined) { data.priority = validatedPriority(input.priority); if (data.priority !== current.priority) changedFields.push("priority"); }
   if (input.contactId !== undefined) {
     const contactId = await validateContact(transaction, context, input.contactId?.trim() || null);
+    if (current.type === "INCIDENT" && contactId) throw new CaseValidationError("Las incidencias no admiten un contacto individual.");
     data.contact = contactId ? { connect: { id: contactId } } : { disconnect: true };
     if (contactId !== current.contactId) changedFields.push("contactId");
   }
   if (!changedFields.length) return current;
   const updated = await transaction.case.update({ where: { id: current.id }, data });
-  await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action: ACTIVITY_ACTION.CASE_UPDATED, metadata: { number: updated.number, title: updated.title, changedFields } }, transaction);
+  await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action: ACTIVITY_ACTION.CASE_UPDATED, metadata: { type: updated.type, number: updated.number, title: updated.title, changedFields } }, transaction);
   return updated;
 }
 
@@ -188,7 +190,7 @@ export async function changeCaseStatusInTransaction(
     : wasClosed && !willBeClosed
       ? ACTIVITY_ACTION.CASE_REOPENED
       : ACTIVITY_ACTION.CASE_STATUS_CHANGED;
-  await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action, metadata: { number: updated.number, from: current.status, to: status } }, transaction);
+  await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action, metadata: { type: updated.type, number: updated.number, from: current.status, to: status } }, transaction);
   return updated;
 }
 
