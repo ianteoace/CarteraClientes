@@ -5,9 +5,10 @@ import { normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
 import { activityActor, recordActivity } from "@/lib/activity-service";
+import { normalizeOptionalEmail } from "@/lib/email";
 
-export type ClientInput = { name: string; phone: string; company: string; notes: string; optIn: boolean; groupIds?: string[] };
-export type ClientListItem = { id: string; name: string; phone: string; phoneNormalized: string; company: string | null; notes: string | null; optIn: boolean };
+export type ClientInput = { name: string; phone: string; email: string; company: string; notes: string; optIn: boolean; groupIds?: string[] };
+export type ClientListItem = { id: string; name: string; phone: string; phoneNormalized: string; email: string | null; company: string | null; notes: string | null; optIn: boolean };
 export class ClientValidationError extends Error {}
 export class DuplicatePhoneError extends Error {}
 export class ClientNotFoundError extends Error {}
@@ -20,7 +21,7 @@ export function normalizeClientInput(input: ClientInput) {
   if (!name) throw new ClientValidationError("El nombre es obligatorio.");
   if (!phone) throw new ClientValidationError("El teléfono es obligatorio.");
   if (notes.length > 5000) throw new ClientValidationError("Las notas no pueden superar los 5000 caracteres.");
-  return { name, phone, phoneNormalized: normalizePhone(phone), company: company || null, notes: notes || null, optIn: input.optIn };
+  return { name, phone, phoneNormalized: normalizePhone(phone), email: normalizeOptionalEmail(input.email), company: company || null, notes: notes || null, optIn: input.optIn };
 }
 
 function normalizeGroupIds(groupIds: string[] | undefined) {
@@ -33,12 +34,12 @@ function isUniqueNormalizedPhoneError(error: unknown) {
 
 export async function listClients(context: AuthorizationContext): Promise<ClientListItem[]> {
   requirePermission(context, WorkspacePermission.CONTACT_VIEW);
-  return prisma.client.findMany({ where: getClientScopeFilter(context), select: { id: true, name: true, phone: true, phoneNormalized: true, company: true, notes: true, optIn: true }, orderBy: { createdAt: "desc" } });
+  return prisma.client.findMany({ where: getClientScopeFilter(context), select: { id: true, name: true, phone: true, phoneNormalized: true, email: true, company: true, notes: true, optIn: true }, orderBy: { createdAt: "desc" } });
 }
 
 export async function getClientDetails(context: AuthorizationContext, id: string) {
   requirePermission(context, WorkspacePermission.CONTACT_VIEW);
-  return prisma.client.findFirst({ where: { id, ...getClientScopeFilter(context) }, select: { id: true, name: true, phone: true, company: true, notes: true, optIn: true, createdAt: true, clientGroups: { where: hasPermission(context, WorkspacePermission.GROUP_VIEW) ? { group: getGroupScopeFilter(context) } : { groupId: { in: [] } }, select: { group: { select: { id: true, name: true } } }, orderBy: { group: { name: "asc" } } } } });
+  return prisma.client.findFirst({ where: { id, ...getClientScopeFilter(context) }, select: { id: true, name: true, phone: true, email: true, company: true, notes: true, optIn: true, createdAt: true, clientGroups: { where: hasPermission(context, WorkspacePermission.GROUP_VIEW) ? { group: getGroupScopeFilter(context) } : { groupId: { in: [] } }, select: { group: { select: { id: true, name: true } } }, orderBy: { group: { name: "asc" } } } } });
 }
 
 export async function createClient(context: AuthorizationContext, input: ClientInput) {
@@ -69,7 +70,7 @@ export async function updateClient(context: AuthorizationContext, id: string, in
   const data = normalizeClientInput(input);
   try {
     await prisma.$transaction(async (transaction) => {
-      const current = await transaction.client.findFirst({ where: { id, ...getClientScopeFilter(context) }, select: { id: true, name: true, phone: true, phoneNormalized: true, company: true, notes: true, optIn: true } });
+      const current = await transaction.client.findFirst({ where: { id, ...getClientScopeFilter(context) }, select: { id: true, name: true, phone: true, phoneNormalized: true, email: true, company: true, notes: true, optIn: true } });
       if (!current) throw new ClientNotFoundError("El cliente no existe.");
       const changedFields = (Object.keys(data) as Array<keyof typeof data>).filter((field) => current[field] !== data[field]);
       if (!changedFields.length) return;

@@ -19,6 +19,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     contacts: hasPermission(context, WorkspacePermission.CONTACT_VIEW),
     groups: hasPermission(context, WorkspacePermission.GROUP_VIEW),
     campaigns: hasPermission(context, WorkspacePermission.CAMPAIGN_VIEW),
+    tickets: hasPermission(context, WorkspacePermission.TICKET_VIEW),
     team: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     activity: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     settings: hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_VIEW),

@@ -99,6 +99,11 @@ export function ClientForm({ client, groups, groupRequired, onClose }: ClientFor
         </label>
 
         <label className="block space-y-1 text-sm font-medium">
+          <span>Email</span>
+          <input className="field" defaultValue={client?.email ?? ""} name="email" type="email" />
+        </label>
+
+        <label className="block space-y-1 text-sm font-medium">
           <span>Notas</span>
           <textarea className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2" defaultValue={client?.notes ?? ""} maxLength={5000} name="notes" placeholder="Preferencias, contexto o recordatorios personales…" />
           <span className="text-xs font-normal text-zinc-500">Hasta 5000 caracteres. Estas notas son privadas de tu cartera.</span>

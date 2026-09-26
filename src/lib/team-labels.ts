@@ -45,6 +45,16 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Tickets",
+    permissions: [
+      [WorkspacePermission.TICKET_VIEW, "Ver"],
+      [WorkspacePermission.TICKET_CREATE, "Crear"],
+      [WorkspacePermission.TICKET_EDIT, "Editar"],
+      [WorkspacePermission.TICKET_ASSIGN, "Asignar y gestionar participantes"],
+      [WorkspacePermission.TICKET_RESOLVE, "Cambiar estado y resolución"],
+    ],
+  },
+  {
     title: "Equipo",
     permissions: [
       [WorkspacePermission.TEAM_VIEW, "Ver"],

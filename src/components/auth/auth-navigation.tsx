@@ -9,20 +9,22 @@ const links = [
   ["Contactos", "/clientes"],
   ["Grupos", "/grupos"],
   ["Campañas", "/campanas"],
-  ["Equipo", "/equipo"],
+  ["Tickets", "/tickets"],
   ["Actividad", "/actividad"],
+  ["Equipo", "/equipo"],
   ["Configuración", "/configuracion"],
 ] as const;
 
-type Visible = { contacts: boolean; groups: boolean; campaigns: boolean; team: boolean; activity: boolean; settings: boolean };
+type Visible = { contacts: boolean; groups: boolean; campaigns: boolean; tickets: boolean; team: boolean; activity: boolean; settings: boolean };
 
 export function AuthNavigation({ accountName, visible }: { accountName?: string; visible?: Visible }) {
   const pathname = usePathname();
-  if (!accountName || !/^\/$|^\/(?:clientes|grupos|campanas|equipo|actividad|configuracion)(?:\/|$)/.test(pathname)) return null;
+  if (!accountName || !/^\/$|^\/(?:clientes|grupos|campanas|tickets|equipo|actividad|configuracion)(?:\/|$)/.test(pathname)) return null;
   const visibleLinks = links.filter(([, href]) => href === "/"
     || (href === "/clientes" && visible?.contacts)
     || (href === "/grupos" && visible?.groups)
     || (href === "/campanas" && visible?.campaigns)
+    || (href === "/tickets" && visible?.tickets)
     || (href === "/equipo" && visible?.team)
     || (href === "/actividad" && visible?.activity)
     || (href === "/configuracion" && visible?.settings));

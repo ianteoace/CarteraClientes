@@ -9,6 +9,7 @@ import { listWorkspaceActivity, normalizeActivityFilter } from "@/lib/activity-r
 const FILTER_LABELS: Record<ActivityFilter, string> = {
   all: "Todos", contactos: "Contactos", grupos: "Grupos", campanas: "Campañas",
   equipo: "Equipo", invitaciones: "Invitaciones", configuracion: "Configuración",
+  tickets: "Tickets",
 };
 
 function pageHref(filter: ActivityFilter, page?: number) {

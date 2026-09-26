@@ -14,6 +14,7 @@ model Client {
   name               String
   phone              String
   phoneNormalized    String
+  email              String?
   company            String?
   notes              String?
   optIn              Boolean             @default(false)
@@ -66,6 +67,11 @@ enum WorkspacePermission {
   CAMPAIGN_EDIT
   CAMPAIGN_SEND
   CAMPAIGN_DELETE
+  TICKET_VIEW
+  TICKET_CREATE
+  TICKET_EDIT
+  TICKET_ASSIGN
+  TICKET_RESOLVE
   WORKSPACE_SETTINGS_VIEW
   WORKSPACE_SETTINGS_EDIT
   TEAM_VIEW
@@ -79,20 +85,24 @@ enum GroupScopeMode {
 }
 
 model WorkspaceMember {
-  id                  String                @id @default(cuid())
-  workspaceId         String
-  userId              String
-  role                WorkspaceRole         @default(VIEWER)
-  groupScopeMode      GroupScopeMode        @default(ALL)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  workspace           Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  permissionOverrides MemberPermission[]
-  groupAccess         MemberGroupAccess[]
-  sentInvitations     WorkspaceInvitation[] @relation("InvitedByMember")
-  acceptedInvitations WorkspaceInvitation[] @relation("AcceptedMember")
-  activities          Activity[]            @relation("ActivityActor")
-  createdCases        Case[]                @relation("CaseCreator")
+  id                      String                @id @default(cuid())
+  workspaceId             String
+  userId                  String
+  role                    WorkspaceRole         @default(VIEWER)
+  groupScopeMode          GroupScopeMode        @default(ALL)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  workspace               Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  permissionOverrides     MemberPermission[]
+  groupAccess             MemberGroupAccess[]
+  sentInvitations         WorkspaceInvitation[] @relation("InvitedByMember")
+  acceptedInvitations     WorkspaceInvitation[] @relation("AcceptedMember")
+  activities              Activity[]            @relation("ActivityActor")
+  createdCases            Case[]                @relation("CaseCreator")
+  assignedTickets         TicketDetails[]       @relation("TicketAssignee")
+  ticketParticipations    TicketParticipant[]   @relation("TicketParticipantMember")
+  addedTicketParticipants TicketParticipant[]   @relation("TicketParticipantAdder")
+  ticketNotes             TicketNote[]          @relation("TicketNoteAuthor")
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -105,29 +115,77 @@ model WorkspaceSequence {
 }
 
 model Case {
-  id                String           @id @default(cuid())
-  workspaceId       String
-  number            Int
-  contactId         String?
-  type              String
-  title             String
-  description       String?
-  status            String
-  priority          String?
-  createdByMemberId String?
-  createdByUserId   String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  closedAt          DateTime?
-  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  contact           Client?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  createdByMember   WorkspaceMember? @relation("CaseCreator", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+  id                 String              @id @default(cuid())
+  workspaceId        String
+  number             Int
+  contactId          String?
+  type               String
+  title              String
+  description        String?
+  status             String
+  priority           String?
+  createdByMemberId  String?
+  createdByUserId    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  closedAt           DateTime?
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact            Client?             @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdByMember    WorkspaceMember?    @relation("CaseCreator", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+  ticketDetails      TicketDetails?
+  ticketParticipants TicketParticipant[]
+  ticketNotes        TicketNote[]
 
   @@unique([workspaceId, number])
   @@index([workspaceId, type, createdAt])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, contactId, createdAt])
   @@index([createdByMemberId])
+}
+
+model TicketDetails {
+  id               String           @id @default(cuid())
+  caseId           String           @unique
+  assignedMemberId String?
+  resolution       String?
+  source           String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  case             Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  assignedMember   WorkspaceMember? @relation("TicketAssignee", fields: [assignedMemberId], references: [id], onDelete: SetNull)
+
+  @@index([assignedMemberId])
+}
+
+model TicketParticipant {
+  id              String           @id @default(cuid())
+  caseId          String
+  memberId        String?
+  memberUserId    String
+  addedByMemberId String?
+  addedByUserId   String?
+  createdAt       DateTime         @default(now())
+  case            Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  member          WorkspaceMember? @relation("TicketParticipantMember", fields: [memberId], references: [id], onDelete: SetNull)
+  addedByMember   WorkspaceMember? @relation("TicketParticipantAdder", fields: [addedByMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([caseId, memberId])
+  @@index([memberId])
+  @@index([addedByMemberId])
+}
+
+model TicketNote {
+  id             String           @id @default(cuid())
+  caseId         String
+  authorMemberId String?
+  authorUserId   String?
+  body           String
+  createdAt      DateTime         @default(now())
+  case           Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorMember   WorkspaceMember? @relation("TicketNoteAuthor", fields: [authorMemberId], references: [id], onDelete: SetNull)
+
+  @@index([caseId, createdAt])
+  @@index([authorMemberId])
 }
 
 model Activity {

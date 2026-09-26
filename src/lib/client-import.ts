@@ -5,6 +5,7 @@ import { normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
 import { activityActor, recordActivity } from "@/lib/activity-service";
+import { normalizeOptionalEmail } from "@/lib/email";
 
 const MAX_CSV_FILE_SIZE = 1024 * 1024;
 const MAX_CSV_ROWS = 1000;
@@ -14,6 +15,7 @@ export type ContactImportStatus =
   | "EXISTING_DUPLICATE"
   | "FILE_DUPLICATE"
   | "INVALID_PHONE"
+  | "INVALID_EMAIL"
   | "INVALID_NAME";
 
 export type ContactImportRow = {
@@ -21,6 +23,7 @@ export type ContactImportRow = {
   name: string;
   phone: string;
   phoneNormalized: string | null;
+  email: string;
   company: string;
   status: ContactImportStatus;
 };
@@ -48,6 +51,7 @@ type ParsedContactRow = {
   rowNumber: number;
   name: string;
   phone: string;
+  email: string;
   company: string;
 };
 
@@ -136,6 +140,7 @@ async function readCsvFile(file: File): Promise<ParsedContactRow[]> {
     ["phone", "telefono", "telefono", "celular"].includes(value),
   );
   const companyIndex = headers.findIndex((value) => ["company", "empresa"].includes(value));
+  const emailIndex = headers.findIndex((value) => ["email", "mail", "correo"].includes(value));
 
   if (nameIndex < 0 || phoneIndex < 0) {
     throw new ContactImportError(
@@ -148,9 +153,10 @@ async function readCsvFile(file: File): Promise<ParsedContactRow[]> {
       rowNumber: index + 2,
       name: (row[nameIndex] ?? "").trim(),
       phone: (row[phoneIndex] ?? "").trim(),
+      email: emailIndex >= 0 ? (row[emailIndex] ?? "").trim() : "",
       company: companyIndex >= 0 ? (row[companyIndex] ?? "").trim() : "",
     }))
-    .filter((row) => row.name || row.phone || row.company);
+    .filter((row) => row.name || row.phone || row.email || row.company);
 
   if (contacts.length > MAX_CSV_ROWS) {
     throw new ContactImportError("El CSV supera el límite de 1.000 contactos por importación.");
@@ -184,24 +190,31 @@ async function buildPreview(context: AuthorizationContext, rows: ParsedContactRo
       return { ...row, phoneNormalized: null, status: "INVALID_NAME" };
     }
 
+    let email: string | null;
+    try {
+      email = normalizeOptionalEmail(row.email);
+    } catch {
+      return { ...row, email: row.email.trim().toLocaleLowerCase(), phoneNormalized: null, status: "INVALID_EMAIL" };
+    }
+
     let phoneNormalized: string;
     try {
       phoneNormalized = normalizePhone(row.phone);
     } catch {
-      return { ...row, phoneNormalized: null, status: "INVALID_PHONE" };
+      return { ...row, email: email ?? "", phoneNormalized: null, status: "INVALID_PHONE" };
     }
 
     if (seenPhones.has(phoneNormalized)) {
-      return { ...row, phoneNormalized, status: "FILE_DUPLICATE" };
+      return { ...row, email: email ?? "", phoneNormalized, status: "FILE_DUPLICATE" };
     }
 
     seenPhones.add(phoneNormalized);
 
     if (existingPhones.has(phoneNormalized)) {
-      return { ...row, phoneNormalized, status: "EXISTING_DUPLICATE" };
+      return { ...row, email: email ?? "", phoneNormalized, status: "EXISTING_DUPLICATE" };
     }
 
-    return { ...row, phoneNormalized, status: "READY" };
+    return { ...row, email: email ?? "", phoneNormalized, status: "READY" };
   });
 
   return {
@@ -213,7 +226,7 @@ async function buildPreview(context: AuthorizationContext, rows: ParsedContactRo
         (row) => row.status === "EXISTING_DUPLICATE" || row.status === "FILE_DUPLICATE",
       ).length,
       invalid: previewRows.filter(
-        (row) => row.status === "INVALID_NAME" || row.status === "INVALID_PHONE",
+        (row) => row.status === "INVALID_NAME" || row.status === "INVALID_PHONE" || row.status === "INVALID_EMAIL",
       ).length,
     },
   };
@@ -272,6 +285,7 @@ export async function importContactsFromCsv(context: AuthorizationContext, file:
             workspaceId: context.workspaceId, name: row.name,
             phone: row.phone,
             phoneNormalized: row.phoneNormalized,
+            email: row.email || null,
             company: row.company || null,
             optIn: false,
           })),

@@ -42,7 +42,7 @@ export function ClientsTable({ clients, onEdit, onDelete, selectedIds, onToggle,
             <tr key={client.id}>
               {canSelect ? <td className="px-3 py-3"><input aria-label={`Seleccionar ${client.name}`} checked={selectedIds.has(client.id)} onChange={() => onToggle(client.id)} type="checkbox" /></td> : null}
               <td className="px-4 py-3 font-medium"><Link className="hover:underline" href={`/clientes/${client.id}`}>{client.name}</Link>{client.notes ? <span aria-label="Tiene notas" className="ml-2 text-xs text-zinc-400">●</span> : null}</td>
-              <td className="px-4 py-3 text-zinc-600">{client.phone}</td>
+              <td className="px-4 py-3 text-zinc-600"><span className="block">{client.phone}</span>{client.email ? <span className="block text-xs">{client.email}</span> : null}</td>
               <td className="px-4 py-3 text-zinc-600">{client.company ?? "—"}</td>
               <td className="px-4 py-3">
                 <span

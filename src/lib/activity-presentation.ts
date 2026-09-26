@@ -15,6 +15,10 @@ function count(metadata: Prisma.JsonObject) {
   return typeof metadata.count === "number" ? metadata.count : 0;
 }
 
+const ticketStatusLabels: Record<string, string> = {
+  OPEN: "Abierto", IN_PROGRESS: "En proceso", WAITING_CUSTOMER: "Esperando cliente", RESOLVED: "Resuelto", CLOSED: "Cerrado",
+};
+
 export function describeActivity(action: string, rawMetadata: Prisma.JsonValue | null) {
   const metadata = objectMetadata(rawMetadata);
   const name = text(metadata, "name") ?? "sin nombre";
@@ -47,15 +51,21 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.INVITATION_RESENT: return `reenvió la invitación para ${text(metadata, "email") ?? "un miembro"}`;
     case ACTIVITY_ACTION.INVITATION_REVOKED: return `revocó la invitación para ${text(metadata, "email") ?? "un miembro"}`;
     case ACTIVITY_ACTION.INVITATION_ACCEPTED: return `aceptó la invitación para ${text(metadata, "email") ?? "un miembro"}`;
-    case ACTIVITY_ACTION.CASE_CREATED: return `creó el caso #${metadata.number ?? "-"}: ${text(metadata, "title") ?? "sin título"}`;
-    case ACTIVITY_ACTION.CASE_UPDATED: return `actualizó el caso #${metadata.number ?? "-"}`;
-    case ACTIVITY_ACTION.CASE_STATUS_CHANGED: return `cambió el estado del caso #${metadata.number ?? "-"}`;
-    case ACTIVITY_ACTION.CASE_CLOSED: return `cerró el caso #${metadata.number ?? "-"}`;
-    case ACTIVITY_ACTION.CASE_REOPENED: return `reabrió el caso #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CASE_CREATED: return `${text(metadata, "type") === "TICKET" ? "creó el Ticket" : "creó el caso"} #${metadata.number ?? "-"}: ${text(metadata, "title") ?? "sin título"}`;
+    case ACTIVITY_ACTION.CASE_UPDATED: return `actualizó el Ticket #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CASE_STATUS_CHANGED: return `cambió el estado del Ticket #${metadata.number ?? "-"} a ${ticketStatusLabels[text(metadata, "to") ?? ""] ?? text(metadata, "to") ?? "otro estado"}`;
+    case ACTIVITY_ACTION.CASE_CLOSED: return text(metadata, "to") === "RESOLVED" ? `resolvió el Ticket #${metadata.number ?? "-"}` : `cerró el Ticket #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CASE_REOPENED: return `reabrió el Ticket #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.TICKET_ASSIGNED: return `asignó el Ticket #${metadata.number ?? "-"} a ${target}`;
+    case ACTIVITY_ACTION.TICKET_UNASSIGNED: return `quitó el responsable del Ticket #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.TICKET_PARTICIPANTS_ADDED: return `agregó ${count(metadata)} participante(s) al Ticket #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.TICKET_PARTICIPANTS_REMOVED: return `quitó ${count(metadata)} participante(s) del Ticket #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.TICKET_RESOLUTION_UPDATED: return `actualizó la resolución del Ticket #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.TICKET_NOTE_ADDED: return `agregó una nota al Ticket #${metadata.number ?? "-"}`;
     default: return "realizó una acción en la cartera";
   }
 }
 
 export function activityEntityLabel(entityType: string) {
-  return ({ CONTACT: "Contacto", GROUP: "Grupo", CAMPAIGN: "Campaña", WORKSPACE: "Configuración", MEMBER: "Equipo", INVITATION: "Invitación", CASE: "Caso" } as Record<string, string>)[entityType] ?? "Actividad";
+  return ({ CONTACT: "Contacto", GROUP: "Grupo", CAMPAIGN: "Campaña", WORKSPACE: "Configuración", MEMBER: "Equipo", INVITATION: "Invitación", CASE: "Ticket" } as Record<string, string>)[entityType] ?? "Actividad";
 }

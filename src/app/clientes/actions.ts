@@ -22,6 +22,7 @@ import {
   type ContactImportResult,
 } from "@/lib/client-import";
 import { PhoneNormalizationError } from "@/lib/phone";
+import { EmailValidationError } from "@/lib/email";
 import { addSelectedClientsToGroup, createGroupWithSelectedClients, GroupValidationError, removeSelectedClientsFromGroup } from "@/lib/group-repository";
 
 export type ClientActionResult =
@@ -40,6 +41,7 @@ function readClientInput(formData: FormData) {
   return {
     name: String(formData.get("name") ?? ""),
     phone: String(formData.get("phone") ?? ""),
+    email: String(formData.get("email") ?? ""),
     company: String(formData.get("company") ?? ""),
     notes: String(formData.get("notes") ?? ""),
     optIn: formData.get("optIn") === "on",
@@ -51,7 +53,7 @@ function actionError(error: unknown): ClientActionResult {
   if (
     error instanceof ClientValidationError ||
     error instanceof DuplicatePhoneError ||
-    error instanceof PhoneNormalizationError || error instanceof AuthenticationRequiredError ||
+    error instanceof PhoneNormalizationError || error instanceof EmailValidationError || error instanceof AuthenticationRequiredError ||
     error instanceof AuthorizationError || error instanceof ClientNotFoundError
   ) {
     return { success: false, error: error.message };

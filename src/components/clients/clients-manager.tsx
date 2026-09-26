@@ -39,7 +39,7 @@ export function ClientsManager({ clients, groups, permissions }: ClientsManagerP
 
     return clients.filter(
       (client) =>
-        (authorizationFilter === "all" || (authorizationFilter === "authorized" ? client.optIn : !client.optIn)) && ([client.name, client.phone, client.company ?? "", client.notes ?? ""].some((value) =>
+        (authorizationFilter === "all" || (authorizationFilter === "authorized" ? client.optIn : !client.optIn)) && ([client.name, client.phone, client.email ?? "", client.company ?? "", client.notes ?? ""].some((value) =>
           value.toLocaleLowerCase().includes(normalizedQuery),
         ) ||
         (normalizedPhoneQuery !== null &&
@@ -124,7 +124,7 @@ export function ClientsManager({ clients, groups, permissions }: ClientsManagerP
         aria-label="Buscar contactos"
         className="field flex-1"
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Buscar por nombre, teléfono o empresa"
+        placeholder="Buscar por nombre, teléfono, email o empresa"
         type="search"
         value={query}
       /><select className="rounded-md border border-zinc-300 px-3 py-2 text-sm" aria-label="Autorización" onChange={(event) => setAuthorizationFilter(event.target.value)} value={authorizationFilter}><option value="all">Autorización: Todos</option><option value="authorized">Autorizados</option><option value="unauthorized">Sin autorización</option></select></div>

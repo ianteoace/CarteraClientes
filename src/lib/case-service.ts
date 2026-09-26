@@ -90,7 +90,11 @@ async function validateContact(transaction: Prisma.TransactionClient, context: A
   return contact.id;
 }
 
-export async function createCase(context: AuthorizationContext, input: CreateCaseInput) {
+export async function createCaseInTransaction(
+  context: AuthorizationContext,
+  input: CreateCaseInput,
+  transaction: Prisma.TransactionClient,
+) {
   const type = validatedType(input.type);
   const initialStatus = getInitialCaseStatus(type)!;
   const status = validatedStatus(type, input.status ?? initialStatus);
@@ -99,16 +103,18 @@ export async function createCase(context: AuthorizationContext, input: CreateCas
   const description = normalizedDescription(input.description);
   const requestedContactId = input.contactId?.trim() || null;
 
-  return prisma.$transaction(async (transaction) => {
-    await validateActor(transaction, context);
-    const contactId = await validateContact(transaction, context, requestedContactId);
-    const created = await createCaseRecord(transaction, {
-      workspaceId: context.workspaceId, contactId, type, title, description, status, priority,
-      createdByMemberId: context.memberId, createdByUserId: context.userId,
-    });
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.CASE_CREATED, metadata: { type, number: created.number, title: created.title } }, transaction);
-    return created;
+  await validateActor(transaction, context);
+  const contactId = await validateContact(transaction, context, requestedContactId);
+  const created = await createCaseRecord(transaction, {
+    workspaceId: context.workspaceId, contactId, type, title, description, status, priority,
+    createdByMemberId: context.memberId, createdByUserId: context.userId,
   });
+  await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.CASE_CREATED, metadata: { type, number: created.number, title: created.title } }, transaction);
+  return created;
+}
+
+export function createCase(context: AuthorizationContext, input: CreateCaseInput) {
+  return prisma.$transaction((transaction) => createCaseInTransaction(context, input, transaction));
 }
 
 export function getCaseById(context: AuthorizationContext, id: string) {
@@ -133,46 +139,59 @@ export async function listCases(context: AuthorizationContext, input: ListCasesI
   return { ...result, page, pageSize, pageCount: Math.max(1, Math.ceil(result.total / pageSize)) };
 }
 
-export async function updateCaseCore(context: AuthorizationContext, id: string, input: UpdateCaseCoreInput) {
+export async function updateCaseCoreInTransaction(
+  context: AuthorizationContext,
+  id: string,
+  input: UpdateCaseCoreInput,
+  transaction: Prisma.TransactionClient,
+) {
   if (Object.prototype.hasOwnProperty.call(input, "type")) throw new CaseValidationError("El tipo de un caso no puede modificarse.");
-  return prisma.$transaction(async (transaction) => {
-    const current = await findCaseById(context, id, transaction);
-    if (!current) return null;
-    const data: Prisma.CaseUpdateInput = {};
-    const changedFields: string[] = [];
-    if (input.title !== undefined) { data.title = normalizedTitle(input.title); if (data.title !== current.title) changedFields.push("title"); }
-    if (input.description !== undefined) { data.description = normalizedDescription(input.description); if (data.description !== current.description) changedFields.push("description"); }
-    if (input.priority !== undefined) { data.priority = validatedPriority(input.priority); if (data.priority !== current.priority) changedFields.push("priority"); }
-    if (input.contactId !== undefined) {
-      const contactId = await validateContact(transaction, context, input.contactId?.trim() || null);
-      data.contact = contactId ? { connect: { id: contactId } } : { disconnect: true };
-      if (contactId !== current.contactId) changedFields.push("contactId");
-    }
-    if (!changedFields.length) return current;
-    const updated = await transaction.case.update({ where: { id: current.id }, data });
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action: ACTIVITY_ACTION.CASE_UPDATED, metadata: { number: updated.number, title: updated.title, changedFields } }, transaction);
-    return updated;
-  });
+  const current = await findCaseById(context, id, transaction);
+  if (!current) return null;
+  const data: Prisma.CaseUpdateInput = {};
+  const changedFields: string[] = [];
+  if (input.title !== undefined) { data.title = normalizedTitle(input.title); if (data.title !== current.title) changedFields.push("title"); }
+  if (input.description !== undefined) { data.description = normalizedDescription(input.description); if (data.description !== current.description) changedFields.push("description"); }
+  if (input.priority !== undefined) { data.priority = validatedPriority(input.priority); if (data.priority !== current.priority) changedFields.push("priority"); }
+  if (input.contactId !== undefined) {
+    const contactId = await validateContact(transaction, context, input.contactId?.trim() || null);
+    data.contact = contactId ? { connect: { id: contactId } } : { disconnect: true };
+    if (contactId !== current.contactId) changedFields.push("contactId");
+  }
+  if (!changedFields.length) return current;
+  const updated = await transaction.case.update({ where: { id: current.id }, data });
+  await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action: ACTIVITY_ACTION.CASE_UPDATED, metadata: { number: updated.number, title: updated.title, changedFields } }, transaction);
+  return updated;
 }
 
-export async function changeCaseStatus(context: AuthorizationContext, id: string, nextStatus: string) {
-  return prisma.$transaction(async (transaction) => {
-    const current = await findCaseById(context, id, transaction);
-    if (!current) return null;
-    if (!isCaseType(current.type)) throw new CaseValidationError("El caso tiene un tipo no soportado.");
-    const status = validatedStatus(current.type, nextStatus);
-    if (status === current.status) return current;
-    const wasClosed = isClosedCaseStatus(current.type, current.status);
-    const willBeClosed = isClosedCaseStatus(current.type, status);
-    const closedAt = willBeClosed ? (wasClosed ? current.closedAt ?? new Date() : new Date()) : null;
-    const updated = await transaction.case.update({ where: { id: current.id }, data: { status, closedAt } });
-    // Emitimos un único evento semántico: cerrar/reabrir reemplaza al cambio genérico.
-    const action = !wasClosed && willBeClosed
-      ? ACTIVITY_ACTION.CASE_CLOSED
-      : wasClosed && !willBeClosed
-        ? ACTIVITY_ACTION.CASE_REOPENED
-        : ACTIVITY_ACTION.CASE_STATUS_CHANGED;
-    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action, metadata: { number: updated.number, from: current.status, to: status } }, transaction);
-    return updated;
-  });
+export function updateCaseCore(context: AuthorizationContext, id: string, input: UpdateCaseCoreInput) {
+  return prisma.$transaction((transaction) => updateCaseCoreInTransaction(context, id, input, transaction));
+}
+
+export async function changeCaseStatusInTransaction(
+  context: AuthorizationContext,
+  id: string,
+  nextStatus: string,
+  transaction: Prisma.TransactionClient,
+) {
+  const current = await findCaseById(context, id, transaction);
+  if (!current) return null;
+  if (!isCaseType(current.type)) throw new CaseValidationError("El caso tiene un tipo no soportado.");
+  const status = validatedStatus(current.type, nextStatus);
+  if (status === current.status) return current;
+  const wasClosed = isClosedCaseStatus(current.type, current.status);
+  const willBeClosed = isClosedCaseStatus(current.type, status);
+  const closedAt = willBeClosed ? (wasClosed ? current.closedAt ?? new Date() : new Date()) : null;
+  const updated = await transaction.case.update({ where: { id: current.id }, data: { status, closedAt } });
+  const action = !wasClosed && willBeClosed
+    ? ACTIVITY_ACTION.CASE_CLOSED
+    : wasClosed && !willBeClosed
+      ? ACTIVITY_ACTION.CASE_REOPENED
+      : ACTIVITY_ACTION.CASE_STATUS_CHANGED;
+  await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: updated.id, action, metadata: { number: updated.number, from: current.status, to: status } }, transaction);
+  return updated;
+}
+
+export function changeCaseStatus(context: AuthorizationContext, id: string, nextStatus: string) {
+  return prisma.$transaction((transaction) => changeCaseStatusInTransaction(context, id, nextStatus, transaction));
 }

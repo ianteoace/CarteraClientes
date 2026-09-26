@@ -17,6 +17,30 @@ export const TICKET_STATUS = {
 
 export type TicketStatus = typeof TICKET_STATUS[keyof typeof TICKET_STATUS];
 
+export const TICKET_SOURCE = {
+  MANUAL: "MANUAL",
+  WHATSAPP: "WHATSAPP",
+  EMAIL: "EMAIL",
+} as const;
+
+export type TicketSource = typeof TICKET_SOURCE[keyof typeof TICKET_SOURCE];
+
+export const TICKET_STATUS_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
+  OPEN: [TICKET_STATUS.IN_PROGRESS, TICKET_STATUS.CLOSED],
+  IN_PROGRESS: [TICKET_STATUS.OPEN, TICKET_STATUS.WAITING_CUSTOMER, TICKET_STATUS.RESOLVED, TICKET_STATUS.CLOSED],
+  WAITING_CUSTOMER: [TICKET_STATUS.IN_PROGRESS, TICKET_STATUS.RESOLVED, TICKET_STATUS.CLOSED],
+  RESOLVED: [TICKET_STATUS.IN_PROGRESS, TICKET_STATUS.CLOSED],
+  CLOSED: [TICKET_STATUS.OPEN, TICKET_STATUS.IN_PROGRESS],
+};
+
+export function isTicketStatus(value: unknown): value is TicketStatus {
+  return typeof value === "string" && Object.values(TICKET_STATUS).includes(value as TicketStatus);
+}
+
+export function canTransitionTicketStatus(from: TicketStatus, to: TicketStatus) {
+  return from !== to && TICKET_STATUS_TRANSITIONS[from].includes(to);
+}
+
 export const CASE_PRIORITY = {
   LOW: "LOW",
   NORMAL: "NORMAL",

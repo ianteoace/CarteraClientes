@@ -11,11 +11,17 @@ export const ROLE_PERMISSION_PRESETS: Record<WorkspaceRole, readonly WorkspacePe
     WorkspacePermission.CONTACT_EDIT,
     WorkspacePermission.GROUP_VIEW,
     WorkspacePermission.CAMPAIGN_VIEW,
+    WorkspacePermission.TICKET_VIEW,
+    WorkspacePermission.TICKET_CREATE,
+    WorkspacePermission.TICKET_EDIT,
+    WorkspacePermission.TICKET_ASSIGN,
+    WorkspacePermission.TICKET_RESOLVE,
   ],
   VIEWER: [
     WorkspacePermission.CONTACT_VIEW,
     WorkspacePermission.GROUP_VIEW,
     WorkspacePermission.CAMPAIGN_VIEW,
+    WorkspacePermission.TICKET_VIEW,
   ],
 };
 

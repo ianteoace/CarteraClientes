@@ -21,6 +21,7 @@ const statusLabels: Record<ContactImportStatus, string> = {
   EXISTING_DUPLICATE: "Duplicado existente",
   FILE_DUPLICATE: "Duplicado dentro del archivo",
   INVALID_PHONE: "Teléfono inválido",
+  INVALID_EMAIL: "Email inválido",
   INVALID_NAME: "Nombre inválido",
 };
 
@@ -99,7 +100,7 @@ export function ClientImportDialog({ groups, groupRequired, onClose }: ClientImp
           <div>
             <h2 className="text-xl font-semibold" id="client-import-title">Importar contactos</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Usá un CSV con las columnas name, phone y company. Los contactos importados quedan sin opt-in.
+              Usá un CSV con name, phone y, opcionalmente, company y email. Los contactos importados quedan sin autorización.
             </p>
           </div>
           <button
@@ -154,6 +155,7 @@ export function ClientImportDialog({ groups, groupRequired, onClose }: ClientImp
                     <th className="px-3 py-2 font-medium">Nombre</th>
                     <th className="px-3 py-2 font-medium">Teléfono</th>
                     <th className="px-3 py-2 font-medium">Normalizado</th>
+                    <th className="px-3 py-2 font-medium">Email</th>
                     <th className="px-3 py-2 font-medium">Empresa</th>
                     <th className="px-3 py-2 font-medium">Estado</th>
                   </tr>
@@ -165,6 +167,7 @@ export function ClientImportDialog({ groups, groupRequired, onClose }: ClientImp
                       <td className="px-3 py-2">{row.name || "—"}</td>
                       <td className="px-3 py-2">{row.phone || "—"}</td>
                       <td className="px-3 py-2">{row.phoneNormalized ?? "—"}</td>
+                      <td className="px-3 py-2">{row.email || "—"}</td>
                       <td className="px-3 py-2">{row.company || "—"}</td>
                       <td className="px-3 py-2">{statusLabels[row.status]}</td>
                     </tr>
