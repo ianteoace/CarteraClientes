@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/auth/server";
 import { getAuthorizationContext, hasPermission } from "@/lib/authorization";
 import { WorkspacePermission } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,7 @@ export default async function ClientsPage() {
   if (!user) redirect("/login");
   const context = await getAuthorizationContext();
   if (!hasPermission(context, WorkspacePermission.CONTACT_VIEW)) notFound();
+  const modules = await getWorkspaceModules(context);
   const [clients, groups] = await Promise.all([
     listClients(context),
     hasPermission(context, WorkspacePermission.GROUP_VIEW) ? listGroups(context) : Promise.resolve([]),
@@ -24,7 +27,7 @@ export default async function ClientsPage() {
     delete: hasPermission(context, WorkspacePermission.CONTACT_DELETE),
     manageGroups: hasPermission(context, WorkspacePermission.GROUP_MANAGE_MEMBERS),
     createGroup: hasPermission(context, WorkspacePermission.GROUP_CREATE),
-    createCampaign: hasPermission(context, WorkspacePermission.CAMPAIGN_CREATE),
+    createCampaign: isModuleEnabled(modules, WORKSPACE_MODULE.CAMPAIGNS) && hasPermission(context, WorkspacePermission.CAMPAIGN_CREATE),
     groupRequired: context.groupScopeMode === "SELECTED" && context.role !== "OWNER",
   }} />;
 }

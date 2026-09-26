@@ -14,6 +14,8 @@ import {
   startScheduledCampaignWorkflow,
   type ScheduledCampaignWorkflowInput,
 } from "@/lib/campaign-workflow-starter";
+import { requireModule } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 const PUBLIC_MINIMUM_LEAD_MS = 60_000;
 
@@ -63,6 +65,7 @@ export async function scheduleCampaign(
   input: ScheduleCampaignInput,
   dependencies: ScheduleCampaignDependencies = {},
 ) {
+  await requireModule(context, WORKSPACE_MODULE.CAMPAIGNS);
   requirePermission(context, WorkspacePermission.CAMPAIGN_SEND);
   const now = dependencies.now ?? new Date();
   const normalized = normalizeScheduleInput(
@@ -96,6 +99,7 @@ export async function scheduleCampaign(
 }
 
 export async function cancelScheduledCampaign(context: AuthorizationContext, campaignId: string) {
+  await requireModule(context, WORKSPACE_MODULE.CAMPAIGNS);
   requirePermission(context, WorkspacePermission.CAMPAIGN_SEND);
   return cancelCampaignScheduleInRepository(context, campaignId);
 }

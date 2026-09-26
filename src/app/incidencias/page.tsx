@@ -6,6 +6,8 @@ import { getAuthorizationContext, hasAllGroups, hasPermission } from "@/lib/auth
 import { CASE_PRIORITY, INCIDENT_STATUS } from "@/lib/case-types";
 import { INCIDENT_PRIORITY_LABELS, INCIDENT_STATUS_LABELS } from "@/lib/incident-labels";
 import { getEligibleIncidentMembers, incidentMemberLabel, listIncidents } from "@/lib/incident-service";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,8 @@ function queryHref(values: Record<string, string | undefined>, page?: number) {
 
 export default async function IncidentsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const context = await getAuthorizationContext();
-  if (!hasPermission(context, WorkspacePermission.INCIDENT_VIEW) || !hasAllGroups(context)) notFound();
+  const modules = await getWorkspaceModules(context);
+  if (!isModuleEnabled(modules, WORKSPACE_MODULE.INCIDENTS) || !hasPermission(context, WorkspacePermission.INCIDENT_VIEW) || !hasAllGroups(context)) notFound();
   const query = await searchParams;
   const filters = {
     query: typeof query.q === "string" ? query.q : undefined,

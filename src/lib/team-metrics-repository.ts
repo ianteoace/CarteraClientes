@@ -43,8 +43,7 @@ function ticketScope(context: AuthorizationContext) {
   `;
 }
 
-export function queryWorkspaceTeamMetrics(context: AuthorizationContext, since: Date) {
-  const includeIncidents = hasAllGroups(context);
+export function queryWorkspaceTeamMetrics(context: AuthorizationContext, since: Date, includeTickets: boolean, includeIncidents: boolean) {
   return prisma.$queryRaw<MetricsRow[]>(Prisma.sql`
     WITH current_members AS (
       SELECT wm."id"
@@ -56,6 +55,7 @@ export function queryWorkspaceTeamMetrics(context: AuthorizationContext, since: 
       FROM "Case" c
       WHERE c."workspaceId" = ${context.workspaceId}
         AND c."type" = 'TICKET'
+        AND ${includeTickets}
         ${ticketScope(context)}
     ),
     visible_incidents AS (

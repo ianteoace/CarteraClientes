@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { AuthenticationRequiredError } from "@/lib/auth/server";
 import { AuthorizationError, getAuthorizationContext } from "@/lib/authorization";
 import { CaseValidationError } from "@/lib/case-service";
+import { requireModule, WorkspaceModuleError } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 import {
   IncidentValidationError,
   addIncidentNote,
@@ -25,10 +27,16 @@ export type IncidentActionResult =
   | { success: false; error: string };
 
 function actionError(error: unknown): IncidentActionResult {
-  if (error instanceof IncidentValidationError || error instanceof CaseValidationError || error instanceof AuthorizationError || error instanceof AuthenticationRequiredError) {
+  if (error instanceof IncidentValidationError || error instanceof CaseValidationError || error instanceof AuthorizationError || error instanceof AuthenticationRequiredError || error instanceof WorkspaceModuleError) {
     return { success: false, error: error.message };
   }
   return { success: false, error: "No se pudo completar la acción. Intentá nuevamente." };
+}
+
+async function getIncidentContext() {
+  const context = await getAuthorizationContext();
+  await requireModule(context, WORKSPACE_MODULE.INCIDENTS);
+  return context;
 }
 
 function refreshIncident(number?: number) {
@@ -39,7 +47,7 @@ function refreshIncident(number?: number) {
 
 export async function createIncidentAction(formData: FormData): Promise<IncidentActionResult> {
   try {
-    const incident = await createIncident(await getAuthorizationContext(), {
+    const incident = await createIncident(await getIncidentContext(), {
       title: String(formData.get("title") ?? ""),
       description: String(formData.get("description") ?? ""),
       priority: String(formData.get("priority") ?? "NORMAL"),
@@ -54,7 +62,7 @@ export async function createIncidentAction(formData: FormData): Promise<Incident
 
 export async function updateIncidentAction(id: string, number: number, formData: FormData): Promise<IncidentActionResult> {
   try {
-    const incident = await updateIncident(await getAuthorizationContext(), id, { title: String(formData.get("title") ?? ""), description: String(formData.get("description") ?? ""), priority: String(formData.get("priority") ?? "NORMAL") });
+    const incident = await updateIncident(await getIncidentContext(), id, { title: String(formData.get("title") ?? ""), description: String(formData.get("description") ?? ""), priority: String(formData.get("priority") ?? "NORMAL") });
     if (!incident) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: "Incidencia actualizada." };
@@ -63,7 +71,7 @@ export async function updateIncidentAction(id: string, number: number, formData:
 
 export async function changeIncidentStatusAction(id: string, number: number, status: string, resolution?: string): Promise<IncidentActionResult> {
   try {
-    const incident = await changeIncidentStatus(await getAuthorizationContext(), id, status, resolution);
+    const incident = await changeIncidentStatus(await getIncidentContext(), id, status, resolution);
     if (!incident) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: "Estado actualizado." };
@@ -72,7 +80,7 @@ export async function changeIncidentStatusAction(id: string, number: number, sta
 
 export async function assignIncidentAction(id: string, number: number, memberId: string): Promise<IncidentActionResult> {
   try {
-    const incident = await assignIncident(await getAuthorizationContext(), id, memberId);
+    const incident = await assignIncident(await getIncidentContext(), id, memberId);
     if (!incident) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: "Responsable actualizado." };
@@ -81,7 +89,7 @@ export async function assignIncidentAction(id: string, number: number, memberId:
 
 export async function unassignIncidentAction(id: string, number: number): Promise<IncidentActionResult> {
   try {
-    const incident = await unassignIncident(await getAuthorizationContext(), id);
+    const incident = await unassignIncident(await getIncidentContext(), id);
     if (!incident) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: "La incidencia quedó sin responsable." };
@@ -90,7 +98,7 @@ export async function unassignIncidentAction(id: string, number: number): Promis
 
 export async function addIncidentParticipantsAction(id: string, number: number, memberIds: string[]): Promise<IncidentActionResult> {
   try {
-    const result = await addIncidentParticipants(await getAuthorizationContext(), id, memberIds);
+    const result = await addIncidentParticipants(await getIncidentContext(), id, memberIds);
     if (!result) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: `${result.added} participante(s) agregado(s) · ${result.unchanged} ya participaban` };
@@ -99,7 +107,7 @@ export async function addIncidentParticipantsAction(id: string, number: number, 
 
 export async function removeIncidentParticipantAction(id: string, number: number, memberId: string): Promise<IncidentActionResult> {
   try {
-    const result = await removeIncidentParticipant(await getAuthorizationContext(), id, memberId);
+    const result = await removeIncidentParticipant(await getIncidentContext(), id, memberId);
     if (!result) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: result.removed ? "Participante quitado." : "El miembro ya no participaba." };
@@ -108,7 +116,7 @@ export async function removeIncidentParticipantAction(id: string, number: number
 
 export async function updateIncidentResolutionAction(id: string, number: number, resolution: string): Promise<IncidentActionResult> {
   try {
-    const incident = await updateIncidentResolution(await getAuthorizationContext(), id, resolution);
+    const incident = await updateIncidentResolution(await getIncidentContext(), id, resolution);
     if (!incident) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: "Resolución actualizada." };
@@ -117,7 +125,7 @@ export async function updateIncidentResolutionAction(id: string, number: number,
 
 export async function addIncidentNoteAction(id: string, number: number, body: string): Promise<IncidentActionResult> {
   try {
-    const note = await addIncidentNote(await getAuthorizationContext(), id, body);
+    const note = await addIncidentNote(await getIncidentContext(), id, body);
     if (!note) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: "Nota agregada." };
@@ -126,7 +134,9 @@ export async function addIncidentNoteAction(id: string, number: number, body: st
 
 export async function linkTicketsAction(id: string, number: number, ticketIds: string[]): Promise<IncidentActionResult> {
   try {
-    const result = await linkTickets(await getAuthorizationContext(), id, ticketIds);
+    const context = await getIncidentContext();
+    await requireModule(context, WORKSPACE_MODULE.TICKETS);
+    const result = await linkTickets(context, id, ticketIds);
     if (!result) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: `${result.linked} ticket(s) vinculado(s) · ${result.unchanged} ya estaban vinculados` };
@@ -135,7 +145,7 @@ export async function linkTicketsAction(id: string, number: number, ticketIds: s
 
 export async function unlinkTicketAction(id: string, number: number, ticketId: string): Promise<IncidentActionResult> {
   try {
-    const result = await unlinkTicket(await getAuthorizationContext(), id, ticketId);
+    const result = await unlinkTicket(await getIncidentContext(), id, ticketId);
     if (!result) return { success: false, error: "La incidencia no existe o está fuera de tu alcance." };
     refreshIncident(number);
     return { success: true, message: result.unlinked ? "Ticket desvinculado." : "El ticket ya no estaba vinculado." };

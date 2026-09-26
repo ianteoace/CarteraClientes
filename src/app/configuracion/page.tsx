@@ -4,8 +4,10 @@ import { WorkspacePermission } from "@prisma/client";
 
 import { WorkspaceSettingsForm } from "@/components/settings/workspace-settings-form";
 import { EmailVerification } from "@/components/settings/email-verification";
+import { WorkspaceModulesSettings } from "@/components/settings/workspace-modules-settings";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getAuthorizationContext, hasPermission } from "@/lib/authorization";
+import { getWorkspaceModules } from "@/lib/workspace-module-service";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export default async function SettingsPage() {
 
   const context = await getAuthorizationContext();
   if (!hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_VIEW)) notFound();
+  const modules = await getWorkspaceModules(context);
 
   return (
     <main className="app-page max-w-3xl space-y-6">
@@ -23,6 +26,7 @@ export default async function SettingsPage() {
         <p className="mt-1 text-zinc-600">Personalizá esta cartera.</p>
       </div>
       <WorkspaceSettingsForm description={context.workspace.description} name={context.workspace.name} canEdit={hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_EDIT)} />
+      <WorkspaceModulesSettings initialModules={modules} canEdit={hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_EDIT)} />
       <section className="surface p-6">
         <h2 className="text-xl font-semibold">Cuenta</h2>
         <p className="mt-3 text-sm text-zinc-600">{user.email}</p>

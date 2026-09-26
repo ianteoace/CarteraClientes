@@ -14,6 +14,8 @@ import {
 } from "@/lib/campaign-send-repository";
 import type { MessageProvider } from "@/lib/messaging/message-provider";
 import { getMessageProvider } from "@/lib/messaging/provider-factory";
+import { requireModule } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export class CampaignSendError extends Error {}
 
@@ -26,6 +28,7 @@ export async function sendCampaign(
   context: AuthorizationContext, campaignId: string,
   provider: MessageProvider = getMessageProvider(),
 ) {
+  await requireModule(context, WORKSPACE_MODULE.CAMPAIGNS);
   requirePermission(context, WorkspacePermission.CAMPAIGN_SEND);
   const claim = await claimCampaignForSending(context, campaignId);
 
@@ -45,6 +48,8 @@ export async function processClaimedCampaign(
   campaignId: string,
   provider: MessageProvider = getMessageProvider(),
 ) {
+
+  await requireModule(context, WORKSPACE_MODULE.CAMPAIGNS);
 
   const campaign = await getCampaignPendingRecipients(context, campaignId);
 

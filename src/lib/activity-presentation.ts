@@ -33,6 +33,8 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
   const target = text(metadata, "target") ?? "el miembro";
   switch (action) {
     case ACTIVITY_ACTION.CONTACT_CREATED: return `creó el contacto ${name}`;
+    case ACTIVITY_ACTION.WORKSPACE_MODULE_ENABLED: return `activó el módulo ${text(metadata, "module") ?? ""}`.trim();
+    case ACTIVITY_ACTION.WORKSPACE_MODULE_DISABLED: return `desactivó el módulo ${text(metadata, "module") ?? ""}`.trim();
     case ACTIVITY_ACTION.CONTACT_UPDATED: return `actualizó el contacto ${name}`;
     case ACTIVITY_ACTION.CONTACT_DELETED: return `eliminó el contacto ${name}`;
     case ACTIVITY_ACTION.CONTACT_AUTHORIZATION_CHANGED: return `${metadata.authorized ? "autorizó" : "quitó la autorización de"} ${name} para campañas`;

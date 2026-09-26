@@ -9,6 +9,8 @@ import { isTicketStatus } from "@/lib/case-types";
 import { describeTicketTimeline, ticketActorLabel } from "@/lib/ticket-presentation";
 import { getEligibleTicketMembers, getTicket, getTicketTimeline, ticketMemberLabel } from "@/lib/ticket-service";
 import { TICKET_PRIORITY_LABELS, TICKET_STATUS_LABELS } from "@/lib/ticket-labels";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 import { getRelatedIncidentsForTicket } from "@/lib/incident-service";
 import { INCIDENT_STATUS_LABELS } from "@/lib/incident-labels";
 
@@ -16,16 +18,18 @@ export const dynamic = "force-dynamic";
 
 export default async function TicketDetailPage({ params }: { params: Promise<{ number: string }> }) {
   const context = await getAuthorizationContext();
-  if (!hasPermission(context, WorkspacePermission.TICKET_VIEW)) notFound();
+  const modules = await getWorkspaceModules(context);
+  if (!isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS) || !hasPermission(context, WorkspacePermission.TICKET_VIEW)) notFound();
   const parsed = Number((await params).number);
   const ticket = await getTicket(context, parsed);
   if (!ticket || !isTicketStatus(ticket.status)) notFound();
   const canAssign = hasPermission(context, WorkspacePermission.TICKET_ASSIGN);
+  const canViewIncidents = isModuleEnabled(modules, WORKSPACE_MODULE.INCIDENTS) && hasPermission(context, WorkspacePermission.INCIDENT_VIEW);
   const [timeline, members, user, relatedIncidents] = await Promise.all([
     getTicketTimeline(context, ticket.number),
     canAssign ? getEligibleTicketMembers(context, ticket.contactId) : Promise.resolve([]),
     getCurrentUser(),
-    getRelatedIncidentsForTicket(context, ticket.id),
+    canViewIncidents ? getRelatedIncidentsForTicket(context, ticket.id) : Promise.resolve([]),
   ]);
   const participants = ticket.ticketParticipants.map((participant) => ({
     id: participant.id,

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { WorkspacePermission } from "@prisma/client";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 import { TicketForm } from "@/components/tickets/ticket-form";
 import { getAuthorizationContext, hasPermission } from "@/lib/authorization";
@@ -10,7 +12,8 @@ export const dynamic = "force-dynamic";
 
 export default async function NewTicketPage({ searchParams }: { searchParams: Promise<{ contactId?: string | string[] }> }) {
   const context = await getAuthorizationContext();
-  if (!hasPermission(context, WorkspacePermission.TICKET_CREATE)) notFound();
+  const modules = await getWorkspaceModules(context);
+  if (!isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS) || !hasPermission(context, WorkspacePermission.TICKET_CREATE)) notFound();
   const [query, options] = await Promise.all([searchParams, getTicketFormOptions(context)]);
   const requestedContactId = typeof query.contactId === "string" ? query.contactId : undefined;
   const initialContactId = options.contacts.some(({ id }) => id === requestedContactId) ? requestedContactId : undefined;

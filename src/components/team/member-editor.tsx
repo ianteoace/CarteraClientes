@@ -9,6 +9,7 @@ import {
 } from "@/app/equipo/actions";
 import { ROLE_PERMISSION_PRESETS } from "@/lib/permission-presets";
 import { PERMISSION_GROUPS, ROLE_LABELS } from "@/lib/team-labels";
+import { getPermissionModule, WORKSPACE_MODULE_DETAILS, type WorkspaceModuleKey } from "@/lib/workspace-modules";
 
 type Props = {
   memberId: string;
@@ -23,11 +24,12 @@ type Props = {
   scopeMode: GroupScopeMode;
   selectedGroupIds: string[];
   groups: { id: string; name: string }[];
+  disabledModules: WorkspaceModuleKey[];
 };
 
 export function MemberEditor({
   memberId, role, actorRole, actorHasAllGroups, actorPermissions, canManageRole, canManagePermissions,
-  effectivePermissions, overridePermissions, scopeMode, selectedGroupIds, groups,
+  effectivePermissions, overridePermissions, scopeMode, selectedGroupIds, groups, disabledModules,
 }: Props) {
   const [pending, startTransition] = useTransition();
   const [notice, setNotice] = useState<TeamActionResult | null>(null);
@@ -98,11 +100,13 @@ export function MemberEditor({
               const checked = effectiveSet.has(permission);
               const customized = overrideSet.has(permission);
               const cannotGrant = !checked && actorRole !== WorkspaceRole.OWNER && !actorSet.has(permission);
+              const permissionModule = getPermissionModule(permission);
+              const moduleDisabled = permissionModule ? disabledModules.includes(permissionModule) : false;
               return <label key={permission} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
-                <span>{label}<span className="ml-2 text-xs text-muted">{customized ? "Personalizado" : "Predeterminado"}</span></span>
+                <span>{label}<span className="ml-2 text-xs text-muted">{moduleDisabled && permissionModule ? `${WORKSPACE_MODULE_DETAILS[permissionModule].label} — módulo desactivado` : customized ? "Personalizado" : "Predeterminado"}</span></span>
                 <input
                   type="checkbox" className="h-5 w-5 shrink-0 accent-black"
-                  checked={checked} disabled={!canManagePermissions || pending || cannotGrant}
+                  checked={checked} disabled={!canManagePermissions || pending || cannotGrant || moduleDisabled}
                   aria-label={`${group.title}: ${label}`}
                   onChange={() => run(() => setMemberPermissionAction(memberId, permission, !checked))}
                 />

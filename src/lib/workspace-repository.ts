@@ -4,6 +4,7 @@ import type { AuthorizationContext } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
 import { activityActor, recordActivity } from "@/lib/activity-service";
+import { NEW_WORKSPACE_MODULE_DEFAULTS } from "@/lib/workspace-modules";
 
 export class WorkspaceValidationError extends Error {}
 export class MultipleWorkspacesError extends Error {}
@@ -31,6 +32,9 @@ export async function getOrCreateDefaultWorkspace(userId: string) {
             data: {
               name: "Mi cartera",
               members: { create: { userId, role: WorkspaceRole.OWNER } },
+              modules: {
+                create: Object.entries(NEW_WORKSPACE_MODULE_DEFAULTS).map(([key, enabled]) => ({ key, enabled })),
+              },
             },
             include: { members: { where: { userId } } },
           });

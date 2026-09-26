@@ -6,6 +6,8 @@ import { getAuthorizationContext, hasPermission } from "@/lib/authorization";
 import { CASE_PRIORITY, TICKET_STATUS } from "@/lib/case-types";
 import { listTickets, ticketMemberLabel } from "@/lib/ticket-service";
 import { TICKET_PRIORITY_LABELS, TICKET_STATUS_LABELS } from "@/lib/ticket-labels";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,8 @@ function queryHref(values: Record<string, string | undefined>, page?: number) {
 
 export default async function TicketsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const context = await getAuthorizationContext();
-  if (!hasPermission(context, WorkspacePermission.TICKET_VIEW)) notFound();
+  const modules = await getWorkspaceModules(context);
+  if (!isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS) || !hasPermission(context, WorkspacePermission.TICKET_VIEW)) notFound();
   const query = await searchParams;
   const filters = {
     query: typeof query.q === "string" ? query.q : undefined,

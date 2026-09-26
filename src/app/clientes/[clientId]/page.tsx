@@ -8,6 +8,8 @@ import { getAuthorizationContext, hasPermission } from "@/lib/authorization";
 import { getClientDetails } from "@/lib/client-repository";
 import { getRecentTicketsForContact } from "@/lib/ticket-service";
 import { TICKET_STATUS_LABELS } from "@/lib/ticket-labels";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +18,18 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ c
   if (!user) redirect("/login");
   const context = await getAuthorizationContext();
   if (!hasPermission(context, WorkspacePermission.CONTACT_VIEW)) notFound();
+  const modules = await getWorkspaceModules(context);
+  const ticketsEnabled = isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS);
   const { clientId } = await params;
   const [contact, tickets] = await Promise.all([
     getClientDetails(context, clientId),
-    getRecentTicketsForContact(context, clientId),
+    ticketsEnabled ? getRecentTicketsForContact(context, clientId) : Promise.resolve([]),
   ]);
   if (!contact) notFound();
   const canEdit = hasPermission(context, WorkspacePermission.CONTACT_EDIT);
   const canManageGroups = hasPermission(context, WorkspacePermission.GROUP_MANAGE_MEMBERS);
-  const canCreateTicket = hasPermission(context, WorkspacePermission.TICKET_CREATE);
-  const canViewTickets = hasPermission(context, WorkspacePermission.TICKET_VIEW);
+  const canCreateTicket = ticketsEnabled && hasPermission(context, WorkspacePermission.TICKET_CREATE);
+  const canViewTickets = ticketsEnabled && hasPermission(context, WorkspacePermission.TICKET_VIEW);
 
   return <main className="app-page max-w-4xl">
     <Link className="text-sm font-semibold text-muted hover:text-foreground" href="/clientes">← Volver a Contactos</Link>

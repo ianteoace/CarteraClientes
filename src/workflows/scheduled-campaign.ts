@@ -3,6 +3,8 @@ import { sleep } from "workflow";
 import { processClaimedCampaign } from "../lib/campaign-send-service";
 import { claimScheduledCampaignForSending } from "../lib/campaign-send-repository";
 import type { ScheduledCampaignWorkflowInput } from "../lib/campaign-workflow-starter";
+import { requireModule } from "../lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "../lib/workspace-modules";
 
 export async function scheduledCampaignWorkflow(input: ScheduledCampaignWorkflowInput) {
   "use workflow";
@@ -18,6 +20,7 @@ export async function scheduledCampaignWorkflow(input: ScheduledCampaignWorkflow
 export async function claimScheduledCampaignStep(input: ScheduledCampaignWorkflowInput) {
   "use step";
 
+  await requireModule(input, WORKSPACE_MODULE.CAMPAIGNS);
   return claimScheduledCampaignForSending({
     ...input,
     scheduledAt: new Date(input.scheduledAt),

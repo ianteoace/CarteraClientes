@@ -3,6 +3,8 @@ import { AuthNavigation } from "@/components/auth/auth-navigation";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getAuthorizationContextIfAvailable, hasAllGroups, hasPermission } from "@/lib/authorization";
 import { WorkspacePermission } from "@prisma/client";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,12 +17,13 @@ export const dynamic = "force-dynamic";
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const user = await getCurrentUser();
   const context = user ? await getAuthorizationContextIfAvailable(user.id) : null;
+  const modules = context ? await getWorkspaceModules(context) : null;
   const visible = context ? {
     contacts: hasPermission(context, WorkspacePermission.CONTACT_VIEW),
     groups: hasPermission(context, WorkspacePermission.GROUP_VIEW),
-    campaigns: hasPermission(context, WorkspacePermission.CAMPAIGN_VIEW),
-    tickets: hasPermission(context, WorkspacePermission.TICKET_VIEW),
-    incidents: hasPermission(context, WorkspacePermission.INCIDENT_VIEW) && hasAllGroups(context),
+    campaigns: Boolean(modules && isModuleEnabled(modules, WORKSPACE_MODULE.CAMPAIGNS)) && hasPermission(context, WorkspacePermission.CAMPAIGN_VIEW),
+    tickets: Boolean(modules && isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS)) && hasPermission(context, WorkspacePermission.TICKET_VIEW),
+    incidents: Boolean(modules && isModuleEnabled(modules, WORKSPACE_MODULE.INCIDENTS)) && hasPermission(context, WorkspacePermission.INCIDENT_VIEW) && hasAllGroups(context),
     team: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     activity: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     settings: hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_VIEW),

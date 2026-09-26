@@ -5,6 +5,8 @@ import { WorkspacePermission } from "@prisma/client";
 import { hasAllGroups, hasPermission, requirePermission, type AuthorizationContext } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { queryMemberRecentWork, queryWorkspaceTeamMetrics } from "@/lib/team-metrics-repository";
+import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export const METRICS_PERIOD = {
   "7d": 7,
@@ -39,7 +41,10 @@ export type MemberMetrics = {
 export async function getWorkspaceTeamMetrics(context: AuthorizationContext, requestedPeriod?: string, now = new Date()) {
   requirePermission(context, WorkspacePermission.TEAM_METRICS_VIEW);
   const period = normalizeMetricsPeriod(requestedPeriod);
-  const rows = await queryWorkspaceTeamMetrics(context, periodStart(period, now));
+  const modules = await getWorkspaceModules(context);
+  const ticketsAvailable = isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS);
+  const incidentsAvailable = isModuleEnabled(modules, WORKSPACE_MODULE.INCIDENTS) && hasAllGroups(context);
+  const rows = await queryWorkspaceTeamMetrics(context, periodStart(period, now), ticketsAvailable, incidentsAvailable);
   const metrics = rows.map((row): MemberMetrics => ({
     memberId: row.memberId,
     current: { openTickets: row.openTickets, openIncidents: row.openIncidents },
@@ -58,7 +63,8 @@ export async function getWorkspaceTeamMetrics(context: AuthorizationContext, req
     period,
     days: METRICS_PERIOD[period],
     since: periodStart(period, now),
-    incidentsAvailable: hasAllGroups(context),
+    ticketsAvailable,
+    incidentsAvailable,
     metrics,
     totals: {
       openTickets: first?.workspaceOpenTickets ?? 0,
@@ -80,8 +86,9 @@ export async function getMemberRecentWork(context: AuthorizationContext, memberI
   const exists = await prisma.workspaceMember.count({ where: { id: memberId, workspaceId: context.workspaceId } });
   if (!exists) return null;
   const period = normalizeMetricsPeriod(requestedPeriod);
-  const canViewTickets = hasPermission(context, WorkspacePermission.TICKET_VIEW);
-  const canViewIncidents = hasAllGroups(context) && hasPermission(context, WorkspacePermission.INCIDENT_VIEW);
+  const modules = await getWorkspaceModules(context);
+  const canViewTickets = isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS) && hasPermission(context, WorkspacePermission.TICKET_VIEW);
+  const canViewIncidents = isModuleEnabled(modules, WORKSPACE_MODULE.INCIDENTS) && hasAllGroups(context) && hasPermission(context, WorkspacePermission.INCIDENT_VIEW);
   const rows = canViewTickets || canViewIncidents
     ? await queryMemberRecentWork(context, memberId, periodStart(period, now), canViewTickets, canViewIncidents)
     : [];

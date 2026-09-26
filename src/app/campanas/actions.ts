@@ -15,6 +15,8 @@ import {
 } from "@/lib/campaign-repository";
 import { AuthorizationError, getAuthorizationContext } from "@/lib/authorization";
 import { MessageProviderConfigurationError } from "@/lib/messaging/provider-factory";
+import { requireModule, WorkspaceModuleError } from "@/lib/workspace-module-service";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 import {
   CampaignScheduleStateError,
   CampaignScheduleValidationError,
@@ -42,7 +44,8 @@ function actionError(error: unknown): CampaignActionResult {
     error instanceof CampaignScheduleValidationError ||
     error instanceof CampaignScheduleStateError ||
     error instanceof CampaignWorkflowStartError ||
-    error instanceof AuthorizationError
+    error instanceof AuthorizationError ||
+    error instanceof WorkspaceModuleError
   ) {
     return { success: false, error: error.message };
   }
@@ -51,6 +54,12 @@ function actionError(error: unknown): CampaignActionResult {
     success: false,
     error: "No se pudo guardar la campaña. Intentá nuevamente.",
   };
+}
+
+async function getCampaignContext() {
+  const context = await getAuthorizationContext();
+  await requireModule(context, WORKSPACE_MODULE.CAMPAIGNS);
+  return context;
 }
 
 function revalidateCampaignPaths(campaignId?: string) {
@@ -62,15 +71,15 @@ function revalidateCampaignPaths(campaignId?: string) {
 }
 
 export async function getCampaignAudienceAction(groupId: string) {
-  return getCampaignAudience(await getAuthorizationContext(), groupId);
+  return getCampaignAudience(await getCampaignContext(), groupId);
 }
 
-export async function getManualCampaignAudienceAction(clientIds: string[]) { return getManualCampaignAudience(await getAuthorizationContext(), clientIds); }
-export async function createManualCampaignAction(name: string, message: string, clientIds: string[]): Promise<CampaignActionResult> { try { const campaign = await createManualCampaign(await getAuthorizationContext(), { name, message }, clientIds); revalidateCampaignPaths(campaign.id); return { success: true, campaignId: campaign.id }; } catch (error) { return actionError(error); } }
+export async function getManualCampaignAudienceAction(clientIds: string[]) { return getManualCampaignAudience(await getCampaignContext(), clientIds); }
+export async function createManualCampaignAction(name: string, message: string, clientIds: string[]): Promise<CampaignActionResult> { try { const campaign = await createManualCampaign(await getCampaignContext(), { name, message }, clientIds); revalidateCampaignPaths(campaign.id); return { success: true, campaignId: campaign.id }; } catch (error) { return actionError(error); } }
 
 export async function createCampaignAction(formData: FormData): Promise<CampaignActionResult> {
   try {
-    const campaign = await createCampaign(await getAuthorizationContext(), readCampaignInput(formData));
+    const campaign = await createCampaign(await getCampaignContext(), readCampaignInput(formData));
     revalidateCampaignPaths(campaign.id);
     return { success: true, campaignId: campaign.id };
   } catch (error) {
@@ -84,7 +93,7 @@ export async function updateCampaignDraftAction(
 ): Promise<CampaignActionResult> {
   try {
     const input = readCampaignInput(formData);
-    await updateCampaignDraft(await getAuthorizationContext(), id, input);
+    await updateCampaignDraft(await getCampaignContext(), id, input);
     revalidateCampaignPaths(id);
     return { success: true };
   } catch (error) {
@@ -94,7 +103,7 @@ export async function updateCampaignDraftAction(
 
 export async function markCampaignReadyAction(id: string): Promise<CampaignActionResult> {
   try {
-    await markCampaignReady(await getAuthorizationContext(), id);
+    await markCampaignReady(await getCampaignContext(), id);
     revalidateCampaignPaths(id);
     return { success: true };
   } catch (error) {
@@ -104,11 +113,11 @@ export async function markCampaignReadyAction(id: string): Promise<CampaignActio
 
 export async function simulateCampaignSendAction(id: string): Promise<CampaignActionResult> {
   try {
-    await sendCampaign(await getAuthorizationContext(), id);
+    await sendCampaign(await getCampaignContext(), id);
     revalidateCampaignPaths(id);
     return { success: true };
   } catch (error) {
-    if (error instanceof CampaignSendError || error instanceof MessageProviderConfigurationError || error instanceof AuthorizationError) {
+    if (error instanceof CampaignSendError || error instanceof MessageProviderConfigurationError || error instanceof AuthorizationError || error instanceof WorkspaceModuleError) {
       return { success: false, error: error.message };
     }
 
@@ -125,7 +134,7 @@ export async function scheduleCampaignAction(
   timezone: string,
 ): Promise<CampaignActionResult> {
   try {
-    await scheduleCampaign(await getAuthorizationContext(), id, { scheduledAt, timezone });
+    await scheduleCampaign(await getCampaignContext(), id, { scheduledAt, timezone });
     revalidateCampaignPaths(id);
     return { success: true };
   } catch (error) {
@@ -135,7 +144,7 @@ export async function scheduleCampaignAction(
 
 export async function cancelCampaignScheduleAction(id: string): Promise<CampaignActionResult> {
   try {
-    await cancelScheduledCampaign(await getAuthorizationContext(), id);
+    await cancelScheduledCampaign(await getCampaignContext(), id);
     revalidateCampaignPaths(id);
     return { success: true };
   } catch (error) {
