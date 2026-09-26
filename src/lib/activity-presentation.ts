@@ -23,8 +23,17 @@ const incidentStatusLabels: Record<string, string> = {
   OPEN: "Abierta", INVESTIGATING: "Investigando", MONITORING: "Monitoreando", RESOLVED: "Resuelta", CLOSED: "Cerrada",
 };
 
+const orderStatusLabels: Record<string, string> = {
+  DRAFT: "Borrador", CONFIRMED: "Confirmado", PREPARING: "Preparando", READY: "Listo", COMPLETED: "Completado", CANCELLED: "Cancelado",
+};
+
+function caseStatusLabels(metadata: Prisma.JsonObject) {
+  const type = text(metadata, "type");
+  return type === "INCIDENT" ? incidentStatusLabels : type === "ORDER" ? orderStatusLabels : ticketStatusLabels;
+}
+
 function caseNoun(metadata: Prisma.JsonObject) {
-  return text(metadata, "type") === "INCIDENT" ? "la Incidencia" : "el Ticket";
+  return text(metadata, "type") === "INCIDENT" ? "la Incidencia" : text(metadata, "type") === "ORDER" ? "el Pedido" : "el Ticket";
 }
 
 export function describeActivity(action: string, rawMetadata: Prisma.JsonValue | null) {
@@ -67,8 +76,8 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.INVITATION_ACCEPTED: return `aceptó la invitación para ${text(metadata, "email") ?? "un miembro"}`;
     case ACTIVITY_ACTION.CASE_CREATED: return `creó ${caseNoun(metadata)} #${metadata.number ?? "-"}: ${text(metadata, "title") ?? "sin título"}`;
     case ACTIVITY_ACTION.CASE_UPDATED: return `actualizó ${caseNoun(metadata)} #${metadata.number ?? "-"}`;
-    case ACTIVITY_ACTION.CASE_STATUS_CHANGED: return `cambió el estado de ${caseNoun(metadata)} #${metadata.number ?? "-"} a ${(text(metadata, "type") === "INCIDENT" ? incidentStatusLabels : ticketStatusLabels)[text(metadata, "to") ?? ""] ?? text(metadata, "to") ?? "otro estado"}`;
-    case ACTIVITY_ACTION.CASE_CLOSED: return text(metadata, "to") === "RESOLVED" ? `resolvió ${caseNoun(metadata)} #${metadata.number ?? "-"}` : `cerró ${caseNoun(metadata)} #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CASE_STATUS_CHANGED: return `cambió el estado de ${caseNoun(metadata)} #${metadata.number ?? "-"} a ${caseStatusLabels(metadata)[text(metadata, "to") ?? ""] ?? text(metadata, "to") ?? "otro estado"}`;
+    case ACTIVITY_ACTION.CASE_CLOSED: return text(metadata, "type") === "ORDER" && text(metadata, "to") === "COMPLETED" ? `completó ${caseNoun(metadata)} #${metadata.number ?? "-"}` : text(metadata, "to") === "RESOLVED" ? `resolvió ${caseNoun(metadata)} #${metadata.number ?? "-"}` : `cerró ${caseNoun(metadata)} #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.CASE_REOPENED: return `reabrió ${caseNoun(metadata)} #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.TICKET_ASSIGNED: return `asignó el Ticket #${metadata.number ?? "-"} a ${target}`;
     case ACTIVITY_ACTION.TICKET_UNASSIGNED: return `quitó el responsable del Ticket #${metadata.number ?? "-"}`;
@@ -84,11 +93,17 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.INCIDENT_NOTE_ADDED: return `agregó una nota a la Incidencia #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.INCIDENT_TICKETS_LINKED: return `vinculó ${count(metadata)} ticket(s) a la Incidencia #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.INCIDENT_TICKETS_UNLINKED: return `desvinculó ${count(metadata)} ticket(s) de la Incidencia #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.ORDER_ITEMS_UPDATED: return `actualizó ${metadata.itemCount ?? 0} item(s) del Pedido #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.ORDER_PAYMENT_STATUS_CHANGED: return `cambió el pago del Pedido #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.ORDER_FULFILLMENT_UPDATED: return `actualizó la entrega del Pedido #${metadata.number ?? "-"}`;
     default: return "realizó una acción en la cartera";
   }
 }
 
 export function activityEntityLabel(entityType: string, metadata?: Prisma.JsonValue | null) {
-  if (entityType === "CASE") return text(objectMetadata(metadata ?? null), "type") === "INCIDENT" ? "Incidencia" : "Ticket";
+  if (entityType === "CASE") {
+    const type = text(objectMetadata(metadata ?? null), "type");
+    return type === "INCIDENT" ? "Incidencia" : type === "ORDER" ? "Pedido" : "Ticket";
+  }
   return ({ CONTACT: "Contacto", GROUP: "Grupo", CAMPAIGN: "Campaña", WORKSPACE: "Configuración", MEMBER: "Equipo", INVITATION: "Invitación" } as Record<string, string>)[entityType] ?? "Actividad";
 }

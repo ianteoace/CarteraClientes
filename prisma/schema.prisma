@@ -91,6 +91,11 @@ enum WorkspacePermission {
   INCIDENT_EDIT
   INCIDENT_ASSIGN
   INCIDENT_RESOLVE
+  ORDER_VIEW
+  ORDER_CREATE
+  ORDER_EDIT
+  ORDER_MANAGE_STATUS
+  ORDER_MANAGE_PAYMENT
   WORKSPACE_SETTINGS_VIEW
   WORKSPACE_SETTINGS_EDIT
   TEAM_VIEW
@@ -166,12 +171,44 @@ model Case {
   incidentNotes        IncidentNote[]
   incidentTicketLinks  IncidentTicket[]      @relation("IncidentCaseLinks")
   ticketIncidentLinks  IncidentTicket[]      @relation("TicketCaseLinks")
+  orderDetails         OrderDetails?
+  orderItems           OrderItem[]
 
   @@unique([workspaceId, number])
   @@index([workspaceId, type, createdAt])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, contactId, createdAt])
   @@index([createdByMemberId])
+}
+
+model OrderDetails {
+  id               String   @id @default(cuid())
+  caseId           String   @unique
+  paymentStatus    String   @default("PENDING")
+  fulfillmentType  String   @default("PICKUP")
+  fulfillmentNotes String?
+  subtotal         Decimal  @default(0) @db.Decimal(18, 2)
+  discount         Decimal  @default(0) @db.Decimal(18, 2)
+  total            Decimal  @default(0) @db.Decimal(18, 2)
+  currency         String   @default("ARS")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  case             Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderCaseId String
+  description String
+  quantity    Decimal  @db.Decimal(18, 3)
+  unitPrice   Decimal  @db.Decimal(18, 2)
+  lineTotal   Decimal  @db.Decimal(18, 2)
+  position    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orderCase   Case     @relation(fields: [orderCaseId], references: [id], onDelete: Cascade)
+
+  @@index([orderCaseId, position])
 }
 
 model TicketDetails {

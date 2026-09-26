@@ -55,6 +55,16 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Pedidos",
+    permissions: [
+      [WorkspacePermission.ORDER_VIEW, "Ver"],
+      [WorkspacePermission.ORDER_CREATE, "Crear"],
+      [WorkspacePermission.ORDER_EDIT, "Editar"],
+      [WorkspacePermission.ORDER_MANAGE_STATUS, "Cambiar estado"],
+      [WorkspacePermission.ORDER_MANAGE_PAYMENT, "Gestionar pago"],
+    ],
+  },
+  {
     title: "Incidencias",
     permissions: [
       [WorkspacePermission.INCIDENT_VIEW, "Ver"],

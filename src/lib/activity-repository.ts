@@ -16,12 +16,12 @@ export async function listWorkspaceActivity(context: AuthorizationContext, filte
   requirePermission(context, WorkspacePermission.TEAM_VIEW);
   const safePage = Number.isSafeInteger(page) && page > 0 ? Math.min(page, 1000) : 1;
   const entityType = ACTIVITY_FILTERS[filter];
-  const caseSubtype = filter === "tickets" ? "TICKET" : filter === "incidencias" ? "INCIDENT" : null;
+  const caseSubtype = filter === "tickets" ? "TICKET" : filter === "incidencias" ? "INCIDENT" : filter === "pedidos" ? "ORDER" : null;
   const where: Prisma.ActivityWhereInput = {
     workspaceId: context.workspaceId,
     ...(entityType ? { entityType } : {}),
     ...(caseSubtype ? { AND: [{ OR: [
-      { action: { startsWith: caseSubtype === "TICKET" ? "TICKET_" : "INCIDENT_" } },
+      { action: { startsWith: `${caseSubtype}_` } },
       { metadata: { path: ["type"], equals: caseSubtype } },
     ] }] } : {}),
   };

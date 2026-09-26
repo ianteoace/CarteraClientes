@@ -21,6 +21,10 @@ export const ROLE_PERMISSION_PRESETS: Record<WorkspaceRole, readonly WorkspacePe
     WorkspacePermission.INCIDENT_EDIT,
     WorkspacePermission.INCIDENT_ASSIGN,
     WorkspacePermission.INCIDENT_RESOLVE,
+    WorkspacePermission.ORDER_VIEW,
+    WorkspacePermission.ORDER_CREATE,
+    WorkspacePermission.ORDER_EDIT,
+    WorkspacePermission.ORDER_MANAGE_STATUS,
   ],
   VIEWER: [
     WorkspacePermission.CONTACT_VIEW,
@@ -28,6 +32,7 @@ export const ROLE_PERMISSION_PRESETS: Record<WorkspaceRole, readonly WorkspacePe
     WorkspacePermission.CAMPAIGN_VIEW,
     WorkspacePermission.TICKET_VIEW,
     WorkspacePermission.INCIDENT_VIEW,
+    WorkspacePermission.ORDER_VIEW,
   ],
 };
 

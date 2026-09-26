@@ -67,6 +67,34 @@ export function canTransitionIncidentStatus(from: IncidentStatus, to: IncidentSt
   return from !== to && INCIDENT_STATUS_TRANSITIONS[from].includes(to);
 }
 
+export const ORDER_STATUS = {
+  DRAFT: "DRAFT",
+  CONFIRMED: "CONFIRMED",
+  PREPARING: "PREPARING",
+  READY: "READY",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type OrderStatus = typeof ORDER_STATUS[keyof typeof ORDER_STATUS];
+
+export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  DRAFT: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED],
+  CONFIRMED: [ORDER_STATUS.PREPARING, ORDER_STATUS.CANCELLED],
+  PREPARING: [ORDER_STATUS.READY, ORDER_STATUS.CANCELLED],
+  READY: [ORDER_STATUS.COMPLETED, ORDER_STATUS.PREPARING, ORDER_STATUS.CANCELLED],
+  COMPLETED: [],
+  CANCELLED: [ORDER_STATUS.DRAFT],
+};
+
+export function isOrderStatus(value: unknown): value is OrderStatus {
+  return typeof value === "string" && Object.values(ORDER_STATUS).includes(value as OrderStatus);
+}
+
+export function canTransitionOrderStatus(from: OrderStatus, to: OrderStatus) {
+  return from !== to && ORDER_STATUS_TRANSITIONS[from].includes(to);
+}
+
 export const CASE_PRIORITY = {
   LOW: "LOW",
   NORMAL: "NORMAL",
@@ -79,16 +107,19 @@ export type CasePriority = typeof CASE_PRIORITY[keyof typeof CASE_PRIORITY];
 const CASE_STATUS_BY_TYPE: Partial<Record<CaseType, readonly string[]>> = {
   [CASE_TYPE.TICKET]: Object.values(TICKET_STATUS),
   [CASE_TYPE.INCIDENT]: Object.values(INCIDENT_STATUS),
+  [CASE_TYPE.ORDER]: Object.values(ORDER_STATUS),
 };
 
 const CASE_INITIAL_STATUS_BY_TYPE: Partial<Record<CaseType, string>> = {
   [CASE_TYPE.TICKET]: TICKET_STATUS.OPEN,
   [CASE_TYPE.INCIDENT]: INCIDENT_STATUS.OPEN,
+  [CASE_TYPE.ORDER]: ORDER_STATUS.DRAFT,
 };
 
 const CLOSED_CASE_STATUS_BY_TYPE: Partial<Record<CaseType, ReadonlySet<string>>> = {
   [CASE_TYPE.TICKET]: new Set([TICKET_STATUS.RESOLVED, TICKET_STATUS.CLOSED]),
   [CASE_TYPE.INCIDENT]: new Set([INCIDENT_STATUS.RESOLVED, INCIDENT_STATUS.CLOSED]),
+  [CASE_TYPE.ORDER]: new Set([ORDER_STATUS.COMPLETED, ORDER_STATUS.CANCELLED]),
 };
 
 export function isCaseType(value: unknown): value is CaseType {

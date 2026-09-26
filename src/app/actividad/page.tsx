@@ -11,6 +11,7 @@ const FILTER_LABELS: Record<ActivityFilter, string> = {
   equipo: "Equipo", invitaciones: "Invitaciones", configuracion: "Configuración",
   tickets: "Tickets",
   incidencias: "Incidencias",
+  pedidos: "Pedidos",
 };
 
 function pageHref(filter: ActivityFilter, page?: number) {

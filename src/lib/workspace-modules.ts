@@ -1,3 +1,5 @@
+import { WorkspacePermission } from "@prisma/client";
+
 export const WORKSPACE_MODULE = {
   CAMPAIGNS: "CAMPAIGNS",
   TICKETS: "TICKETS",
@@ -12,6 +14,7 @@ export const AVAILABLE_MODULES = [
   WORKSPACE_MODULE.CAMPAIGNS,
   WORKSPACE_MODULE.TICKETS,
   WORKSPACE_MODULE.INCIDENTS,
+  WORKSPACE_MODULE.ORDERS,
 ] as const;
 
 export const NEW_WORKSPACE_MODULE_DEFAULTS: Readonly<Record<WorkspaceModuleKey, boolean>> = {
@@ -25,7 +28,7 @@ export const WORKSPACE_MODULE_DETAILS: Readonly<Record<WorkspaceModuleKey, { lab
   CAMPAIGNS: { label: "Campañas", description: "Mensajes masivos y programados." },
   TICKETS: { label: "Tickets", description: "Gestión de solicitudes y problemas de contactos." },
   INCIDENTS: { label: "Incidencias", description: "Problemas generales relacionados con varios tickets." },
-  ORDERS: { label: "Pedidos", description: "Gestión comercial de pedidos." },
+  ORDERS: { label: "Pedidos", description: "Registrá ventas, items, pagos y entregas asociadas a tus contactos." },
 };
 
 export function isKnownWorkspaceModule(value: string): value is WorkspaceModuleKey {
@@ -40,6 +43,7 @@ export const MODULE_PERMISSIONS: Readonly<Partial<Record<WorkspaceModuleKey, rea
   CAMPAIGNS: [WorkspacePermission.CAMPAIGN_VIEW, WorkspacePermission.CAMPAIGN_CREATE, WorkspacePermission.CAMPAIGN_EDIT, WorkspacePermission.CAMPAIGN_SEND, WorkspacePermission.CAMPAIGN_DELETE],
   TICKETS: [WorkspacePermission.TICKET_VIEW, WorkspacePermission.TICKET_CREATE, WorkspacePermission.TICKET_EDIT, WorkspacePermission.TICKET_ASSIGN, WorkspacePermission.TICKET_RESOLVE],
   INCIDENTS: [WorkspacePermission.INCIDENT_VIEW, WorkspacePermission.INCIDENT_CREATE, WorkspacePermission.INCIDENT_EDIT, WorkspacePermission.INCIDENT_ASSIGN, WorkspacePermission.INCIDENT_RESOLVE],
+  ORDERS: [WorkspacePermission.ORDER_VIEW, WorkspacePermission.ORDER_CREATE, WorkspacePermission.ORDER_EDIT, WorkspacePermission.ORDER_MANAGE_STATUS, WorkspacePermission.ORDER_MANAGE_PAYMENT],
 };
 
 export function getPermissionModule(permission: WorkspacePermission): WorkspaceModuleKey | null {
@@ -48,4 +52,3 @@ export function getPermissionModule(permission: WorkspacePermission): WorkspaceM
   }
   return null;
 }
-import { WorkspacePermission } from "@prisma/client";
