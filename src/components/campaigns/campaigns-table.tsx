@@ -10,6 +10,7 @@ function statusLabel(status: CampaignListItem["status"]) {
   const labels: Record<CampaignListItem["status"], string> = {
     DRAFT: "Borrador",
     READY: "Lista",
+    SCHEDULED: "Programada",
     SENDING: "Enviando",
     COMPLETED: "Completada",
     PARTIAL: "Parcial",
@@ -48,7 +49,14 @@ export function CampaignsTable({ campaigns }: CampaignsTableProps) {
               <td className="px-4 py-3 text-zinc-600">{campaign.sourceGroupName ?? "Selección manual"}</td>
               <td className="px-4 py-3"><span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700">{statusLabel(campaign.status)}</span></td>
               <td className="px-4 py-3 text-zinc-600">{campaign.recipientCount}</td>
-              <td className="px-4 py-3 text-zinc-600">{campaign.createdAt.slice(0, 10)}</td>
+              <td className="px-4 py-3 text-zinc-600">
+                <span>{campaign.createdAt.slice(0, 10)}</span>
+                {campaign.status === "SCHEDULED" && campaign.scheduledAt && campaign.scheduledTimezone ? (
+                  <span className="mt-1 block text-xs text-sky-700">
+                    Programada · {new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: campaign.scheduledTimezone }).format(new Date(campaign.scheduledAt))}
+                  </span>
+                ) : null}
+              </td>
               <td className="px-4 py-3">
                 <Link className="font-medium text-zinc-700 hover:text-zinc-950" href={`/campanas/${campaign.id}`}>
                   Abrir

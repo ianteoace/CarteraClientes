@@ -32,6 +32,8 @@ export type CampaignListItem = {
   sourceGroupName: string | null;
   recipientCount: number;
   createdAt: string;
+  scheduledAt: string | null;
+  scheduledTimezone: string | null;
 };
 
 export type CampaignRecipientItem = {
@@ -57,6 +59,8 @@ export type CampaignDetails = {
     failed: number;
     pending: number;
   };
+  scheduledAt: string | null;
+  scheduledTimezone: string | null;
 };
 
 export class CampaignValidationError extends Error {}
@@ -236,6 +240,8 @@ export async function listCampaigns(context: AuthorizationContext): Promise<Camp
       name: true,
       status: true,
       createdAt: true,
+      scheduledAt: true,
+      scheduledTimezone: true,
       sourceGroup: { select: { name: true } },
       _count: { select: { recipients: true } },
     },
@@ -249,6 +255,8 @@ export async function listCampaigns(context: AuthorizationContext): Promise<Camp
     sourceGroupName: campaign.sourceGroup?.name ?? null,
     recipientCount: campaign._count.recipients,
     createdAt: campaign.createdAt.toISOString(),
+    scheduledAt: campaign.scheduledAt?.toISOString() ?? null,
+    scheduledTimezone: campaign.scheduledTimezone,
   }));
 }
 
@@ -261,6 +269,8 @@ export async function getCampaignDetails(context: AuthorizationContext, id: stri
       name: true,
       message: true,
       status: true,
+      scheduledAt: true,
+      scheduledTimezone: true,
       sourceGroup: { select: { name: true } },
       recipients: {
         ...(!hasAllGroups(context) ? {
@@ -316,6 +326,8 @@ export async function getCampaignDetails(context: AuthorizationContext, id: stri
     recipients: campaign.recipients,
     recipientCount: deliverySummary.total,
     deliverySummary,
+    scheduledAt: campaign.scheduledAt?.toISOString() ?? null,
+    scheduledTimezone: campaign.scheduledTimezone,
   };
 }
 

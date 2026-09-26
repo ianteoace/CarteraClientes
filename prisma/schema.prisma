@@ -114,6 +114,7 @@ model WorkspaceMember {
   addedIncidentParticipants IncidentParticipant[] @relation("IncidentParticipantAdder")
   incidentNotes             IncidentNote[]        @relation("IncidentNoteAuthor")
   linkedIncidentTickets     IncidentTicket[]      @relation("IncidentTicketLinker")
+  scheduledCampaigns        Campaign[]            @relation("CampaignScheduler")
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -373,6 +374,7 @@ model ClientGroup {
 enum CampaignStatus {
   DRAFT
   READY
+  SCHEDULED
   SENDING
   COMPLETED
   PARTIAL
@@ -389,20 +391,28 @@ enum RecipientStatus {
 }
 
 model Campaign {
-  id            String              @id @default(cuid())
-  workspaceId   String
-  name          String
-  message       String
-  status        CampaignStatus      @default(DRAFT)
-  sourceGroupId String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  sourceGroup   Group?              @relation("SourceGroupCampaigns", fields: [sourceGroupId], references: [id], onDelete: SetNull)
-  recipients    CampaignRecipient[]
-  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                    String              @id @default(cuid())
+  workspaceId           String
+  name                  String
+  message               String
+  status                CampaignStatus      @default(DRAFT)
+  sourceGroupId         String?
+  scheduledAt           DateTime?
+  scheduledTimezone     String?
+  scheduleGeneration    String?
+  scheduledByMemberId   String?
+  scheduledByUserId     String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  sourceGroup           Group?              @relation("SourceGroupCampaigns", fields: [sourceGroupId], references: [id], onDelete: SetNull)
+  scheduledByMember     WorkspaceMember?    @relation("CampaignScheduler", fields: [scheduledByMemberId], references: [id], onDelete: SetNull)
+  recipients            CampaignRecipient[]
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([sourceGroupId])
+  @@index([scheduledByMemberId])
   @@index([workspaceId])
+  @@index([workspaceId, status, scheduledAt])
 }
 
 model CampaignRecipient {

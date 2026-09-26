@@ -49,3 +49,4 @@ yarn-error.log*
 # optional caches
 /.turbo/
 .eslintcache
+/.swc

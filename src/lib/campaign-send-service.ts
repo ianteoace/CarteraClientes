@@ -10,6 +10,7 @@ import {
   getCampaignPendingRecipients,
   markRecipientAccepted,
   markRecipientFailed,
+  type CampaignExecutionContext,
 } from "@/lib/campaign-send-repository";
 import type { MessageProvider } from "@/lib/messaging/message-provider";
 import { getMessageProvider } from "@/lib/messaging/provider-factory";
@@ -32,10 +33,23 @@ export async function sendCampaign(
     throw new CampaignSendError("La campaña debe estar lista y no haber sido procesada anteriormente.");
   }
 
+  return processClaimedCampaign({
+    workspaceId: context.workspaceId,
+    actorUserId: context.userId,
+    actorMemberId: context.memberId,
+  }, campaignId, provider);
+}
+
+export async function processClaimedCampaign(
+  context: CampaignExecutionContext,
+  campaignId: string,
+  provider: MessageProvider = getMessageProvider(),
+) {
+
   const campaign = await getCampaignPendingRecipients(context, campaignId);
 
   if (!campaign) {
-    throw new CampaignSendError("La campaña ya no existe.");
+    return finalizeCampaignSending(context, campaignId);
   }
 
   for (const recipient of campaign.recipients) {

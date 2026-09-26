@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
+import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: process.cwd(),
   async headers() {
     return [{ source: "/invitacion/:token", headers: [
       { key: "Referrer-Policy", value: "no-referrer" },
@@ -10,4 +12,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withWorkflow(nextConfig);

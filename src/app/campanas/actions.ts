@@ -15,6 +15,13 @@ import {
 } from "@/lib/campaign-repository";
 import { AuthorizationError, getAuthorizationContext } from "@/lib/authorization";
 import { MessageProviderConfigurationError } from "@/lib/messaging/provider-factory";
+import {
+  CampaignScheduleStateError,
+  CampaignScheduleValidationError,
+  CampaignWorkflowStartError,
+  cancelScheduledCampaign,
+  scheduleCampaign,
+} from "@/lib/campaign-schedule-service";
 
 export type CampaignActionResult =
   | { success: true; campaignId?: string }
@@ -29,7 +36,14 @@ function readCampaignInput(formData: FormData) {
 }
 
 function actionError(error: unknown): CampaignActionResult {
-  if (error instanceof CampaignValidationError || error instanceof CampaignNotEditableError || error instanceof AuthorizationError) {
+  if (
+    error instanceof CampaignValidationError ||
+    error instanceof CampaignNotEditableError ||
+    error instanceof CampaignScheduleValidationError ||
+    error instanceof CampaignScheduleStateError ||
+    error instanceof CampaignWorkflowStartError ||
+    error instanceof AuthorizationError
+  ) {
     return { success: false, error: error.message };
   }
 
@@ -102,5 +116,29 @@ export async function simulateCampaignSendAction(id: string): Promise<CampaignAc
       success: false,
       error: "No se pudo completar la simulación de envío.",
     };
+  }
+}
+
+export async function scheduleCampaignAction(
+  id: string,
+  scheduledAt: string,
+  timezone: string,
+): Promise<CampaignActionResult> {
+  try {
+    await scheduleCampaign(await getAuthorizationContext(), id, { scheduledAt, timezone });
+    revalidateCampaignPaths(id);
+    return { success: true };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function cancelCampaignScheduleAction(id: string): Promise<CampaignActionResult> {
+  try {
+    await cancelScheduledCampaign(await getAuthorizationContext(), id);
+    revalidateCampaignPaths(id);
+    return { success: true };
+  } catch (error) {
+    return actionError(error);
   }
 }

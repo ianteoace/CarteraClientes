@@ -46,6 +46,10 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.CAMPAIGN_CREATED: return `creó la campaña ${name}`;
     case ACTIVITY_ACTION.CAMPAIGN_UPDATED: return `actualizó la campaña ${name}`;
     case ACTIVITY_ACTION.CAMPAIGN_READY: return `marcó como lista la campaña ${name}`;
+    case ACTIVITY_ACTION.CAMPAIGN_SCHEDULED: return `programó la campaña ${name}`;
+    case ACTIVITY_ACTION.CAMPAIGN_RESCHEDULED: return `reprogramó la campaña ${name}`;
+    case ACTIVITY_ACTION.CAMPAIGN_SCHEDULE_CANCELLED: return `canceló la programación de ${name}`;
+    case ACTIVITY_ACTION.CAMPAIGN_SCHEDULE_TRIGGERED: return `inició automáticamente la campaña ${name}`;
     case ACTIVITY_ACTION.CAMPAIGN_SEND_STARTED: return `inició la simulación de ${name}`;
     case ACTIVITY_ACTION.CAMPAIGN_COMPLETED: return `completó la simulación de ${name} para ${count(metadata)} destinatarios`;
     case ACTIVITY_ACTION.CAMPAIGN_PARTIAL: return `completó parcialmente la simulación de ${name}`;

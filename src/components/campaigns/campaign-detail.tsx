@@ -1,10 +1,12 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  cancelCampaignScheduleAction,
   markCampaignReadyAction,
+  scheduleCampaignAction,
   simulateCampaignSendAction,
   updateCampaignDraftAction,
 } from "@/app/campanas/actions";
@@ -20,6 +22,7 @@ type CampaignDetailProps = {
 const CAMPAIGN_STATUS_LABELS: Record<CampaignDetails["status"], string> = {
   DRAFT: "Borrador",
   READY: "Lista",
+  SCHEDULED: "Programada",
   SENDING: "Enviando",
   COMPLETED: "Completada",
   PARTIAL: "Completada parcialmente",
@@ -35,11 +38,22 @@ const RECIPIENT_STATUS_LABELS: Record<CampaignDetails["recipients"][number]["sta
   FAILED: "Fallido",
 };
 
+function subscribeToBrowserEnvironment() {
+  return () => undefined;
+}
+
 export function CampaignDetail({ campaign, canEdit, canSend }: CampaignDetailProps) {
   const router = useRouter();
   const [error, setError] = useState<string>();
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState(campaign.message);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("");
+  const timezone = useSyncExternalStore(
+    subscribeToBrowserEnvironment,
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    () => "",
+  );
   const isDraft = campaign.status === "DRAFT";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -84,6 +98,49 @@ export function CampaignDetail({ campaign, canEdit, canSend }: CampaignDetailPro
 
     router.refresh();
   }
+
+  async function saveSchedule() {
+    if (!scheduleDate || !scheduleTime || !timezone) {
+      setError("Elegí una fecha y hora válidas.");
+      return;
+    }
+
+    const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}:00`);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      setError("Elegí una fecha y hora válidas.");
+      return;
+    }
+
+    setError(undefined);
+    setIsSaving(true);
+    const result = await scheduleCampaignAction(campaign.id, scheduledAt.toISOString(), timezone);
+    setIsSaving(false);
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function cancelSchedule() {
+    setError(undefined);
+    setIsSaving(true);
+    const result = await cancelCampaignScheduleAction(campaign.id);
+    setIsSaving(false);
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  const scheduledLabel = campaign.scheduledAt && campaign.scheduledTimezone
+    ? new Intl.DateTimeFormat("es-AR", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: campaign.scheduledTimezone,
+      }).format(new Date(campaign.scheduledAt))
+    : null;
 
   return (
     <section className="mx-auto w-full max-w-6xl space-y-8 px-6 py-10">
@@ -202,7 +259,7 @@ export function CampaignDetail({ campaign, canEdit, canSend }: CampaignDetailPro
       ) : null}
 
       {campaign.status === "READY" && canSend ? (
-        <section className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-5">
+        <section className="space-y-5 border-y border-amber-200 bg-amber-50 px-1 py-5">
           <div>
             <h2 className="font-semibold text-amber-950">Modo simulación</h2>
             <p className="mt-1 text-sm text-amber-900">
@@ -217,6 +274,54 @@ export function CampaignDetail({ campaign, canEdit, canSend }: CampaignDetailPro
           >
             {isSaving ? "Simulando..." : "Simular envío"}
           </button>
+          <div className="border-t border-amber-200 pt-5">
+            <h2 className="font-semibold text-amber-950">Programar envío</h2>
+            <p className="mt-1 text-sm text-amber-900">La audiencia queda congelada y se procesará con el proveedor mock.</p>
+            <div className="mt-4 grid max-w-2xl gap-4 sm:grid-cols-2">
+              <label className="space-y-1 text-sm font-medium text-amber-950">
+                <span>Fecha</span>
+                <input className="w-full rounded-md border border-amber-300 bg-white px-3 py-2" onChange={(event) => setScheduleDate(event.target.value)} type="date" value={scheduleDate} />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-amber-950">
+                <span>Hora</span>
+                <input className="w-full rounded-md border border-amber-300 bg-white px-3 py-2" onChange={(event) => setScheduleTime(event.target.value)} type="time" value={scheduleTime} />
+              </label>
+            </div>
+            <p className="mt-3 text-sm text-amber-900">Zona horaria: {timezone || "Detectando…"}</p>
+            <button className="mt-4 rounded-md border border-amber-800 px-4 py-2 text-sm font-medium text-amber-950 disabled:opacity-60" disabled={isSaving || !timezone} onClick={saveSchedule} type="button">
+              {isSaving ? "Programando…" : "Programar envío"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {campaign.status === "SCHEDULED" && canSend ? (
+        <section className="space-y-5 border-y border-sky-200 bg-sky-50 px-1 py-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Programada</p>
+            <p className="mt-2 text-xl font-semibold text-sky-950">{scheduledLabel}</p>
+            <p className="mt-1 text-sm text-sky-800">{campaign.scheduledTimezone}</p>
+            <p className="mt-2 text-sm text-sky-900">Modo simulación — no se enviará ningún WhatsApp real.</p>
+          </div>
+          <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
+            <label className="space-y-1 text-sm font-medium text-sky-950">
+              <span>Nueva fecha</span>
+              <input className="w-full rounded-md border border-sky-300 bg-white px-3 py-2" onChange={(event) => setScheduleDate(event.target.value)} type="date" value={scheduleDate} />
+            </label>
+            <label className="space-y-1 text-sm font-medium text-sky-950">
+              <span>Nueva hora</span>
+              <input className="w-full rounded-md border border-sky-300 bg-white px-3 py-2" onChange={(event) => setScheduleTime(event.target.value)} type="time" value={scheduleTime} />
+            </label>
+          </div>
+          <p className="text-sm text-sky-800">Zona horaria: {timezone || "Detectando…"}</p>
+          <div className="flex flex-wrap gap-3">
+            <button className="rounded-md bg-sky-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={isSaving || !timezone} onClick={saveSchedule} type="button">
+              {isSaving ? "Guardando…" : "Reprogramar"}
+            </button>
+            <button className="rounded-md border border-sky-800 px-4 py-2 text-sm font-medium text-sky-950 disabled:opacity-60" disabled={isSaving} onClick={cancelSchedule} type="button">
+              Cancelar programación
+            </button>
+          </div>
         </section>
       ) : null}
     </section>
