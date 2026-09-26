@@ -1,0 +1,1 @@
+ALTER TYPE "WorkspacePermission" ADD VALUE 'TEAM_METRICS_VIEW';

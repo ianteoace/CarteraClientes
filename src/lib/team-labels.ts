@@ -68,6 +68,7 @@ export const PERMISSION_GROUPS = [
     title: "Equipo",
     permissions: [
       [WorkspacePermission.TEAM_VIEW, "Ver"],
+      [WorkspacePermission.TEAM_METRICS_VIEW, "Ver métricas del equipo"],
       [WorkspacePermission.TEAM_MANAGE, "Gestionar equipo"],
       [WorkspacePermission.PERMISSIONS_MANAGE, "Gestionar permisos"],
     ],
