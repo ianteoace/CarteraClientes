@@ -3,6 +3,8 @@ import { Prisma, WorkspacePermission } from "@prisma/client";
 import { getClientScopeFilter, getGroupScopeFilter, hasAllGroups, requirePermission, type AuthorizationContext } from "@/lib/authorization";
 import { normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
+import { activityActor, recordActivity } from "@/lib/activity-service";
 
 const MAX_CSV_FILE_SIZE = 1024 * 1024;
 const MAX_CSV_ROWS = 1000;
@@ -280,6 +282,10 @@ export async function importContactsFromCsv(context: AuthorizationContext, file:
           await transaction.clientGroup.createMany({
             data: created.map((client) => ({ clientId: client.id, groupId })),
           });
+        }
+
+        if (created.length > 0) {
+          await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CONTACT, action: ACTIVITY_ACTION.CONTACTS_IMPORTED, metadata: { count: created.length, assignedToGroup: Boolean(groupId) } }, transaction);
         }
 
         return {

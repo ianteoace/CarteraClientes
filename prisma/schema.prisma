@@ -38,6 +38,7 @@ model Workspace {
   groups      Group[]
   campaigns   Campaign[]
   invitations WorkspaceInvitation[]
+  activities  Activity[]
 }
 
 enum WorkspaceRole {
@@ -87,9 +88,28 @@ model WorkspaceMember {
   groupAccess         MemberGroupAccess[]
   sentInvitations     WorkspaceInvitation[] @relation("InvitedByMember")
   acceptedInvitations WorkspaceInvitation[] @relation("AcceptedMember")
+  activities          Activity[]            @relation("ActivityActor")
 
   @@unique([workspaceId, userId])
   @@index([userId])
+}
+
+model Activity {
+  id            String           @id @default(cuid())
+  workspaceId   String
+  actorUserId   String?
+  actorMemberId String?
+  entityType    String
+  entityId      String?
+  action        String
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorMember   WorkspaceMember? @relation("ActivityActor", fields: [actorMemberId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, entityType, createdAt])
+  @@index([actorMemberId])
 }
 
 model MemberPermission {

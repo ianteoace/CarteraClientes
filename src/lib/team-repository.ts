@@ -5,6 +5,8 @@ import { GroupScopeMode, Prisma, WorkspacePermission, WorkspaceRole } from "@pri
 import { AuthorizationContext, AuthorizationError, getGroupScopeFilter, requirePermission } from "@/lib/authorization";
 import { getEffectivePermissions, ROLE_PERMISSION_PRESETS } from "@/lib/permission-presets";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
+import { activityActor, maskActivityEmail, recordActivity } from "@/lib/activity-service";
 
 export class TeamMemberNotFoundError extends Error {}
 
@@ -43,6 +45,10 @@ function protectOwner(actor: Awaited<ReturnType<typeof currentActor>>, targetRol
   if (actor.role !== WorkspaceRole.OWNER && targetRole === WorkspaceRole.OWNER) {
     throw new AuthorizationError("Solo un Owner puede modificar a otro Owner.");
   }
+}
+
+function activityTarget(member: Awaited<ReturnType<typeof targetMember>>) {
+  return member.acceptedInvitations[0]?.email ? maskActivityEmail(member.acceptedInvitations[0].email) : `Usuario ${member.userId.slice(0, 8)}…`;
 }
 
 export async function listTeamMembers(context: AuthorizationContext) {
@@ -87,10 +93,12 @@ export async function changeMemberRole(context: AuthorizationContext, memberId: 
     if (role === WorkspaceRole.OWNER) {
       await transaction.memberGroupAccess.deleteMany({ where: { memberId: target.id } });
     }
-    return transaction.workspaceMember.update({
+    const member = await transaction.workspaceMember.update({
       where: { id: target.id },
       data: { role, ...(role === WorkspaceRole.OWNER ? { groupScopeMode: GroupScopeMode.ALL } : {}) },
     });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.MEMBER, entityId: target.id, action: ACTIVITY_ACTION.MEMBER_ROLE_CHANGED, metadata: { target: activityTarget(target), from: target.role, to: role } }, transaction);
+    return member;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -108,6 +116,8 @@ export async function setMemberPermission(context: AuthorizationContext, memberI
       throw new AuthorizationError("No podés otorgar un permiso que no tenés.");
     }
     const presetAllows = ROLE_PERMISSION_PRESETS[target.role].includes(permission);
+    const effectiveBefore = getEffectivePermissions(target.role, target.permissionOverrides).has(permission);
+    if (effectiveBefore === allowed) return;
     if (allowed === presetAllows) {
       await transaction.memberPermission.deleteMany({ where: { memberId: target.id, permission } });
     } else {
@@ -117,6 +127,7 @@ export async function setMemberPermission(context: AuthorizationContext, memberI
         update: { allowed },
       });
     }
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.MEMBER, entityId: target.id, action: ACTIVITY_ACTION.MEMBER_PERMISSION_CHANGED, metadata: { target: activityTarget(target), permission, allowed } }, transaction);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -136,7 +147,9 @@ export async function resetMemberPermissions(context: AuthorizationContext, memb
         }
       }
     }
-    return transaction.memberPermission.deleteMany({ where: { memberId: target.id } });
+    const result = await transaction.memberPermission.deleteMany({ where: { memberId: target.id } });
+    if (result.count) await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.MEMBER, entityId: target.id, action: ACTIVITY_ACTION.MEMBER_PERMISSIONS_RESET, metadata: { target: activityTarget(target), count: result.count } }, transaction);
+    return result;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -179,6 +192,9 @@ export async function updateMemberGroupScope(
     if (mode === GroupScopeMode.SELECTED && uniqueIds.length) {
       await transaction.memberGroupAccess.createMany({ data: uniqueIds.map((groupId) => ({ memberId: target.id, groupId })) });
     }
-    return transaction.workspaceMember.update({ where: { id: target.id }, data: { groupScopeMode: mode } });
+    const member = await transaction.workspaceMember.update({ where: { id: target.id }, data: { groupScopeMode: mode } });
+    const scopeChanged = target.groupScopeMode !== mode || target.groupAccess.length !== (mode === GroupScopeMode.SELECTED ? uniqueIds.length : 0) || (mode === GroupScopeMode.SELECTED && target.groupAccess.some(({ groupId }) => !uniqueIds.includes(groupId)));
+    if (scopeChanged) await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.MEMBER, entityId: target.id, action: ACTIVITY_ACTION.MEMBER_SCOPE_CHANGED, metadata: { target: activityTarget(target), from: target.groupScopeMode, to: mode, selectedGroupCount: mode === GroupScopeMode.SELECTED ? uniqueIds.length : 0 } }, transaction);
+    return member;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

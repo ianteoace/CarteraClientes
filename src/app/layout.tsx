@@ -20,6 +20,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     groups: hasPermission(context, WorkspacePermission.GROUP_VIEW),
     campaigns: hasPermission(context, WorkspacePermission.CAMPAIGN_VIEW),
     team: hasPermission(context, WorkspacePermission.TEAM_VIEW),
+    activity: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     settings: hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_VIEW),
   } : undefined;
   return (

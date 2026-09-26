@@ -2,6 +2,8 @@ import { CampaignStatus, RecipientStatus, WorkspacePermission } from "@prisma/cl
 
 import { AuthorizationError, getClientScopeFilter, hasAllGroups, requirePermission, type AuthorizationContext } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
+import { activityActor, recordActivity } from "@/lib/activity-service";
 
 export type CampaignDeliverySummary = {
   total: number;
@@ -15,7 +17,7 @@ export async function claimCampaignForSending(context: AuthorizationContext, cam
   return prisma.$transaction(async (transaction) => {
     const campaign = await transaction.campaign.findFirst({
       where: { id: campaignId, workspaceId: context.workspaceId, status: CampaignStatus.READY },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!campaign) return { count: 0 };
 
@@ -29,10 +31,12 @@ export async function claimCampaignForSending(context: AuthorizationContext, cam
       }
     }
 
-    return transaction.campaign.updateMany({
+    const result = await transaction.campaign.updateMany({
       where: { id: campaignId, workspaceId: context.workspaceId, status: CampaignStatus.READY },
       data: { status: CampaignStatus.SENDING },
     });
+    if (result.count) await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CAMPAIGN, entityId: campaign.id, action: ACTIVITY_ACTION.CAMPAIGN_SEND_STARTED, metadata: { name: campaign.name, provider: "mock" } }, transaction);
+    return result;
   });
 }
 
@@ -137,9 +141,12 @@ export async function finalizeCampaignSending(context: AuthorizationContext, cam
     status = CampaignStatus.PARTIAL;
   }
 
-  await prisma.campaign.updateMany({
-    where: { id: campaignId, workspaceId: context.workspaceId, status: CampaignStatus.SENDING },
-    data: { status },
+  await prisma.$transaction(async (transaction) => {
+    const campaign = await transaction.campaign.findFirst({ where: { id: campaignId, workspaceId: context.workspaceId, status: CampaignStatus.SENDING }, select: { id: true, name: true } });
+    if (!campaign) return;
+    await transaction.campaign.update({ where: { id: campaign.id }, data: { status } });
+    const action = status === CampaignStatus.COMPLETED ? ACTIVITY_ACTION.CAMPAIGN_COMPLETED : status === CampaignStatus.FAILED ? ACTIVITY_ACTION.CAMPAIGN_FAILED : ACTIVITY_ACTION.CAMPAIGN_PARTIAL;
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CAMPAIGN, entityId: campaign.id, action, metadata: { name: campaign.name, provider: "mock", count: summary.total, accepted: summary.accepted, failed: summary.failed } }, transaction);
   });
 
   return summary;

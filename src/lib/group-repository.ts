@@ -2,6 +2,8 @@ import { WorkspacePermission } from "@prisma/client";
 
 import { getClientScopeFilter, getGroupScopeFilter, grantMemberGroupAccess, hasAllGroups, hasPermission, requirePermission, type AuthorizationContext } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
+import { activityActor, recordActivity } from "@/lib/activity-service";
 
 export type GroupInput = {
   name: string;
@@ -112,22 +114,34 @@ export async function createGroup(context: AuthorizationContext, input: GroupInp
   return prisma.$transaction(async (transaction) => {
     const group = await transaction.group.create({ data: { ...normalizeGroupInput(input), workspaceId: context.workspaceId } });
     if (!hasAllGroups(context)) await grantMemberGroupAccess(transaction, context.memberId, group.id);
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: group.id, action: ACTIVITY_ACTION.GROUP_CREATED, metadata: { name: group.name } }, transaction);
     return group;
   });
 }
 
 export async function updateGroup(context: AuthorizationContext, id: string, input: GroupInput) {
   requirePermission(context, WorkspacePermission.GROUP_EDIT);
-  const result = await prisma.group.updateMany({ where: { id, ...getGroupScopeFilter(context) }, data: normalizeGroupInput(input) });
-  if (!result.count) throw new GroupValidationError("El grupo no está disponible.");
-  return result;
+  const data = normalizeGroupInput(input);
+  return prisma.$transaction(async (transaction) => {
+    const current = await transaction.group.findFirst({ where: { id, ...getGroupScopeFilter(context) }, select: { id: true, name: true, description: true } });
+    if (!current) throw new GroupValidationError("El grupo no está disponible.");
+    const changedFields = (["name", "description"] as const).filter((field) => current[field] !== data[field]);
+    if (!changedFields.length) return current;
+    const group = await transaction.group.update({ where: { id: current.id }, data });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: group.id, action: ACTIVITY_ACTION.GROUP_UPDATED, metadata: { name: group.name, changedFields } }, transaction);
+    return group;
+  });
 }
 
 export async function deleteGroup(context: AuthorizationContext, id: string) {
   requirePermission(context, WorkspacePermission.GROUP_DELETE);
-  const result = await prisma.group.deleteMany({ where: { id, ...getGroupScopeFilter(context) } });
-  if (!result.count) throw new GroupValidationError("El grupo no está disponible.");
-  return result;
+  return prisma.$transaction(async (transaction) => {
+    const group = await transaction.group.findFirst({ where: { id, ...getGroupScopeFilter(context) }, select: { id: true, name: true } });
+    if (!group) throw new GroupValidationError("El grupo no está disponible.");
+    await transaction.group.delete({ where: { id: group.id } });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: group.id, action: ACTIVITY_ACTION.GROUP_DELETED, metadata: { name: group.name } }, transaction);
+    return group;
+  });
 }
 
 export async function addClientsToGroup(context: AuthorizationContext, groupId: string, clientIds: string[]) {
@@ -141,11 +155,13 @@ export async function addClientsToGroup(context: AuthorizationContext, groupId: 
 
   return prisma.$transaction(async (transaction) => {
     const [groups, clients] = await Promise.all([
-      transaction.group.count({ where: { id: groupId, ...getGroupScopeFilter(context) } }),
+      transaction.group.findFirst({ where: { id: groupId, ...getGroupScopeFilter(context) }, select: { id: true, name: true } }),
       transaction.client.count({ where: { id: { in: uniqueClientIds }, ...getClientScopeFilter(context) } }),
     ]);
-    if (groups !== 1 || clients !== uniqueClientIds.length) throw new GroupValidationError("No tenés acceso al grupo o a los clientes seleccionados.");
-    return transaction.clientGroup.createMany({ data: uniqueClientIds.map((clientId) => ({ groupId, clientId })), skipDuplicates: true });
+    if (!groups || clients !== uniqueClientIds.length) throw new GroupValidationError("No tenés acceso al grupo o a los clientes seleccionados.");
+    const result = await transaction.clientGroup.createMany({ data: uniqueClientIds.map((clientId) => ({ groupId, clientId })), skipDuplicates: true });
+    if (result.count) await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: groupId, action: ACTIVITY_ACTION.GROUP_MEMBERS_ADDED, metadata: { name: groups.name, count: result.count } }, transaction);
+    return result;
   });
 }
 
@@ -154,13 +170,15 @@ export async function removeClientFromGroup(context: AuthorizationContext, group
   requirePermission(context, WorkspacePermission.CONTACT_VIEW);
   return prisma.$transaction(async (transaction) => {
     const [visibleGroup, visibleClient] = await Promise.all([
-      transaction.group.count({ where: { id: groupId, ...getGroupScopeFilter(context) } }),
+      transaction.group.findFirst({ where: { id: groupId, ...getGroupScopeFilter(context) }, select: { id: true, name: true } }),
       transaction.client.count({ where: { id: clientId, ...getClientScopeFilter(context) } }),
     ]);
-    if (visibleGroup !== 1 || visibleClient !== 1) {
+    if (!visibleGroup || visibleClient !== 1) {
       throw new GroupValidationError("El grupo o contacto no está disponible.");
     }
-    return transaction.clientGroup.deleteMany({ where: { clientId, groupId, group: getGroupScopeFilter(context), client: getClientScopeFilter(context) } });
+    const result = await transaction.clientGroup.deleteMany({ where: { clientId, groupId, group: getGroupScopeFilter(context), client: getClientScopeFilter(context) } });
+    if (result.count) await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: groupId, action: ACTIVITY_ACTION.GROUP_MEMBERS_REMOVED, metadata: { name: visibleGroup.name, count: result.count } }, transaction);
+    return result;
   });
 }
 
@@ -181,9 +199,10 @@ export async function addSelectedClientsToGroup(context: AuthorizationContext, g
   requirePermission(context, WorkspacePermission.GROUP_MANAGE_MEMBERS);
   const ids = await ensureAccessibleClients(context, clientIds);
   return prisma.$transaction(async (tx) => {
-    const group = await tx.group.findFirst({ where: { id: groupId, ...getGroupScopeFilter(context) }, select: { id: true } });
+    const group = await tx.group.findFirst({ where: { id: groupId, ...getGroupScopeFilter(context) }, select: { id: true, name: true } });
     if (!group) throw new GroupValidationError("El grupo seleccionado no existe.");
     const result = await tx.clientGroup.createMany({ data: ids.map((clientId) => ({ groupId, clientId })), skipDuplicates: true });
+    if (result.count) await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: group.id, action: ACTIVITY_ACTION.GROUP_MEMBERS_ADDED, metadata: { name: group.name, count: result.count } }, tx);
     return { added: result.count, unchanged: ids.length - result.count };
   });
 }
@@ -192,9 +211,10 @@ export async function removeSelectedClientsFromGroup(context: AuthorizationConte
   requirePermission(context, WorkspacePermission.GROUP_MANAGE_MEMBERS);
   const ids = await ensureAccessibleClients(context, clientIds);
   return prisma.$transaction(async (tx) => {
-    const group = await tx.group.findFirst({ where: { id: groupId, ...getGroupScopeFilter(context) }, select: { id: true } });
+    const group = await tx.group.findFirst({ where: { id: groupId, ...getGroupScopeFilter(context) }, select: { id: true, name: true } });
     if (!group) throw new GroupValidationError("El grupo seleccionado no existe.");
     const result = await tx.clientGroup.deleteMany({ where: { groupId, clientId: { in: ids }, client: getClientScopeFilter(context) } });
+    if (result.count) await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: group.id, action: ACTIVITY_ACTION.GROUP_MEMBERS_REMOVED, metadata: { name: group.name, count: result.count } }, tx);
     return { removed: result.count, unchanged: ids.length - result.count };
   });
 }
@@ -207,6 +227,8 @@ export async function createGroupWithSelectedClients(context: AuthorizationConte
     const group = await tx.group.create({ data: { ...normalizeGroupInput(input), workspaceId: context.workspaceId } });
     if (!hasAllGroups(context)) await grantMemberGroupAccess(tx, context.memberId, group.id);
     await tx.clientGroup.createMany({ data: ids.map((clientId) => ({ groupId: group.id, clientId })) });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: group.id, action: ACTIVITY_ACTION.GROUP_CREATED, metadata: { name: group.name } }, tx);
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.GROUP, entityId: group.id, action: ACTIVITY_ACTION.GROUP_MEMBERS_ADDED, metadata: { name: group.name, count: ids.length } }, tx);
     return group;
   });
 }

@@ -2,6 +2,8 @@ import { CampaignStatus, RecipientStatus, WorkspacePermission } from "@prisma/cl
 
 import { getClientScopeFilter, getGroupScopeFilter, hasAllGroups, requirePermission, type AuthorizationContext } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
+import { activityActor, recordActivity } from "@/lib/activity-service";
 
 export type CampaignInput = {
   name: string;
@@ -75,7 +77,11 @@ export async function createManualCampaign(context: AuthorizationContext, input:
   const data = normalizeDraftInput(input);
   const audience = await getManualCampaignAudience(context, clientIds);
   if (!audience.eligibleCount) throw new CampaignValidationError("Ninguno de los contactos seleccionados está autorizado para campañas.");
-  return prisma.campaign.create({ data: { ...data, workspaceId: context.workspaceId, sourceGroupId: null, recipients: { create: audience.clients.map((client) => ({ clientId: client.id, nameSnapshot: client.name, phoneSnapshot: client.phone })) } } });
+  return prisma.$transaction(async (transaction) => {
+    const campaign = await transaction.campaign.create({ data: { ...data, workspaceId: context.workspaceId, sourceGroupId: null, recipients: { create: audience.clients.map((client) => ({ clientId: client.id, nameSnapshot: client.name, phoneSnapshot: client.phone })) } } });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CAMPAIGN, entityId: campaign.id, action: ACTIVITY_ACTION.CAMPAIGN_CREATED, metadata: { name: campaign.name, recipientCount: audience.eligibleCount } }, transaction);
+    return campaign;
+  });
 }
 
 function normalizeCampaignInput(input: CampaignInput) {
@@ -204,7 +210,7 @@ export async function createCampaign(context: AuthorizationContext, input: Campa
       throw new CampaignValidationError("El grupo no tiene clientes con opt-in habilitado.");
     }
 
-    return transaction.campaign.create({
+    const campaign = await transaction.campaign.create({
       data: {
         ...data, workspaceId: context.workspaceId,
         recipients: {
@@ -216,6 +222,8 @@ export async function createCampaign(context: AuthorizationContext, input: Campa
         },
       },
     });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CAMPAIGN, entityId: campaign.id, action: ACTIVITY_ACTION.CAMPAIGN_CREATED, metadata: { name: campaign.name, recipientCount: audience.clientGroups.length } }, transaction);
+    return campaign;
   });
 }
 
@@ -317,24 +325,22 @@ export async function updateCampaignDraft(
 ) {
   requirePermission(context, WorkspacePermission.CAMPAIGN_EDIT);
   const data = normalizeDraftInput(input);
-  const result = await prisma.campaign.updateMany({
-    where: { id, workspaceId: context.workspaceId, status: CampaignStatus.DRAFT },
-    data,
+  await prisma.$transaction(async (transaction) => {
+    const current = await transaction.campaign.findFirst({ where: { id, workspaceId: context.workspaceId, status: CampaignStatus.DRAFT }, select: { id: true, name: true, message: true } });
+    if (!current) throw new CampaignNotEditableError("La campaña ya no está en borrador.");
+    const changedFields = (["name", "message"] as const).filter((field) => current[field] !== data[field]);
+    if (!changedFields.length) return;
+    const campaign = await transaction.campaign.update({ where: { id: current.id }, data });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CAMPAIGN, entityId: campaign.id, action: ACTIVITY_ACTION.CAMPAIGN_UPDATED, metadata: { name: campaign.name, changedFields } }, transaction);
   });
-
-  if (result.count === 0) {
-    throw new CampaignNotEditableError("La campaña ya no está en borrador.");
-  }
 }
 
 export async function markCampaignReady(context: AuthorizationContext, id: string) {
   requirePermission(context, WorkspacePermission.CAMPAIGN_EDIT);
-  const result = await prisma.campaign.updateMany({
-    where: { id, workspaceId: context.workspaceId, status: CampaignStatus.DRAFT },
-    data: { status: CampaignStatus.READY },
+  await prisma.$transaction(async (transaction) => {
+    const campaign = await transaction.campaign.findFirst({ where: { id, workspaceId: context.workspaceId, status: CampaignStatus.DRAFT }, select: { id: true, name: true } });
+    if (!campaign) throw new CampaignNotEditableError("La campaña ya no está en borrador.");
+    await transaction.campaign.update({ where: { id: campaign.id }, data: { status: CampaignStatus.READY } });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CAMPAIGN, entityId: campaign.id, action: ACTIVITY_ACTION.CAMPAIGN_READY, metadata: { name: campaign.name } }, transaction);
   });
-
-  if (result.count === 0) {
-    throw new CampaignNotEditableError("La campaña ya no está en borrador.");
-  }
 }

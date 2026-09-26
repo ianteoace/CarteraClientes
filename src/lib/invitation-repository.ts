@@ -12,6 +12,8 @@ import {
 import { ROLE_PERMISSION_PRESETS } from "@/lib/permission-presets";
 import { prisma } from "@/lib/prisma";
 import { currentActor, requireActorPermission } from "@/lib/team-repository";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
+import { activityActor, maskActivityEmail, recordActivity } from "@/lib/activity-service";
 
 export type InvitationErrorCode = "INVALID" | "EXPIRED" | "REVOKED" | "ACCEPTED" | "EMAIL_MISMATCH" | "EMAIL_UNVERIFIED" | "VALIDATION";
 
@@ -127,7 +129,7 @@ export async function createWorkspaceInvitation(
     }
     if (prior) await transaction.workspaceInvitation.update({ where: { id: prior.id }, data: { revokedAt: now } });
 
-    return transaction.workspaceInvitation.create({
+    const invitation = await transaction.workspaceInvitation.create({
       data: {
         workspaceId: context.workspaceId, email, role: input.role, groupScopeMode: input.groupScopeMode,
         tokenHash, invitedByMemberId: actor.id, expiresAt: new Date(now.getTime() + INVITATION_TTL_MS),
@@ -137,6 +139,8 @@ export async function createWorkspaceInvitation(
       },
       include: { workspace: { select: { name: true } } },
     });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.INVITATION, entityId: invitation.id, action: ACTIVITY_ACTION.INVITATION_CREATED, metadata: { email: maskActivityEmail(email), role: input.role, groupScopeMode: input.groupScopeMode, selectedGroupCount: groupIds.length } }, transaction);
+    return invitation;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
   return { invitation, token };
@@ -176,11 +180,13 @@ export async function resendWorkspaceInvitation(context: AuthorizationContext, i
     if (existing.emailAttemptedAt && now.getTime() - existing.emailAttemptedAt.getTime() < INVITATION_SEND_COOLDOWN_MS) {
       throw new InvitationValidationError("Esperá un minuto antes de reenviar esta invitación.");
     }
-    return transaction.workspaceInvitation.update({
+    const invitation = await transaction.workspaceInvitation.update({
       where: { id: existing.id },
       data: { tokenHash, expiresAt: new Date(now.getTime() + INVITATION_TTL_MS), emailAttemptedAt: now, emailSentAt: null },
       include: { workspace: { select: { name: true } } },
     });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.INVITATION, entityId: invitation.id, action: ACTIVITY_ACTION.INVITATION_RESENT, metadata: { email: maskActivityEmail(invitation.email) } }, transaction);
+    return invitation;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
   return { invitation, token };
 }
@@ -190,11 +196,14 @@ export async function revokeWorkspaceInvitation(context: AuthorizationContext, i
     const actor = await currentActor(transaction, context);
     requireActorPermission(actor, WorkspacePermission.TEAM_MANAGE);
     requireActorPermission(actor, WorkspacePermission.PERMISSIONS_MANAGE);
+    const invitation = await transaction.workspaceInvitation.findFirst({ where: { id: invitationId, workspaceId: context.workspaceId, acceptedAt: null, revokedAt: null }, select: { id: true, email: true } });
+    if (!invitation) throw new InvitationValidationError("La invitación ya no está pendiente.");
     const result = await transaction.workspaceInvitation.updateMany({
       where: { id: invitationId, workspaceId: context.workspaceId, acceptedAt: null, revokedAt: null },
       data: { revokedAt: new Date() },
     });
     if (!result.count) throw new InvitationValidationError("La invitación ya no está pendiente.");
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.INVITATION, entityId: invitation.id, action: ACTIVITY_ACTION.INVITATION_REVOKED, metadata: { email: maskActivityEmail(invitation.email) } }, transaction);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -283,6 +292,7 @@ export async function acceptWorkspaceInvitation(
       });
     }
     await transaction.workspaceInvitation.update({ where: { id: invitation.id }, data: { acceptedMemberId: member.id } });
+    await recordActivity({ workspaceId: invitation.workspaceId, actorUserId: user.id, actorMemberId: member.id, entityType: ACTIVITY_ENTITY.INVITATION, entityId: invitation.id, action: ACTIVITY_ACTION.INVITATION_ACCEPTED, metadata: { email: maskActivityEmail(invitation.email), role: invitation.role, groupScopeMode: invitation.groupScopeMode } }, transaction);
     return { workspaceId: invitation.workspaceId, alreadyMember: Boolean(existing) };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }

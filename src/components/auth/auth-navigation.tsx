@@ -10,19 +10,21 @@ const links = [
   ["Grupos", "/grupos"],
   ["Campañas", "/campanas"],
   ["Equipo", "/equipo"],
+  ["Actividad", "/actividad"],
   ["Configuración", "/configuracion"],
 ] as const;
 
-type Visible = { contacts: boolean; groups: boolean; campaigns: boolean; team: boolean; settings: boolean };
+type Visible = { contacts: boolean; groups: boolean; campaigns: boolean; team: boolean; activity: boolean; settings: boolean };
 
 export function AuthNavigation({ accountName, visible }: { accountName?: string; visible?: Visible }) {
   const pathname = usePathname();
-  if (!accountName || !/^\/$|^\/(?:clientes|grupos|campanas|equipo|configuracion)(?:\/|$)/.test(pathname)) return null;
+  if (!accountName || !/^\/$|^\/(?:clientes|grupos|campanas|equipo|actividad|configuracion)(?:\/|$)/.test(pathname)) return null;
   const visibleLinks = links.filter(([, href]) => href === "/"
     || (href === "/clientes" && visible?.contacts)
     || (href === "/grupos" && visible?.groups)
     || (href === "/campanas" && visible?.campaigns)
     || (href === "/equipo" && visible?.team)
+    || (href === "/actividad" && visible?.activity)
     || (href === "/configuracion" && visible?.settings));
 
   return <header className="app-sidebar border-b border-border bg-[#111] text-white md:fixed md:inset-y-0 md:left-0 md:z-30 md:w-56 md:border-b-0 md:border-r md:border-[#2a2a2a]">

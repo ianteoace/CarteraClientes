@@ -2,6 +2,8 @@ import { Prisma, WorkspacePermission, WorkspaceRole } from "@prisma/client";
 
 import type { AuthorizationContext } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
+import { activityActor, recordActivity } from "@/lib/activity-service";
 
 export class WorkspaceValidationError extends Error {}
 export class MultipleWorkspacesError extends Error {}
@@ -63,9 +65,13 @@ export async function updateWorkspace(
   if (name.length > 120) throw new WorkspaceValidationError("El nombre no puede superar 120 caracteres.");
   if (description.length > 1000) throw new WorkspaceValidationError("La descripción no puede superar 1000 caracteres.");
 
-  const result = await prisma.workspace.updateMany({
-    where: { id: context.workspaceId, members: { some: { id: context.memberId, userId: context.userId } } },
-    data: { name, description: description || null },
+  await prisma.$transaction(async (transaction) => {
+    const workspace = await transaction.workspace.findFirst({ where: { id: context.workspaceId, members: { some: { id: context.memberId, userId: context.userId } } }, select: { id: true, name: true, description: true } });
+    if (!workspace) throw new WorkspaceValidationError("No tenés acceso a esta cartera.");
+    const data = { name, description: description || null };
+    const changedFields = (["name", "description"] as const).filter((field) => workspace[field] !== data[field]);
+    if (!changedFields.length) return;
+    await transaction.workspace.update({ where: { id: workspace.id }, data });
+    await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.WORKSPACE, entityId: workspace.id, action: ACTIVITY_ACTION.WORKSPACE_UPDATED, metadata: { changedFields } }, transaction);
   });
-  if (!result.count) throw new WorkspaceValidationError("No tenés acceso a esta cartera.");
 }
