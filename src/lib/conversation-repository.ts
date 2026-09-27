@@ -104,6 +104,7 @@ export async function getConversationDetails(context: AuthorizationContext, id: 
     select: {
       id: true, workspaceId: true, channel: true, status: true, clientId: true,
       externalParticipantId: true, externalDisplayName: true, lastMessageAt: true,
+      lastInboundAt: true,
       client: { select: { id: true, name: true, company: true } },
     },
   });
@@ -119,14 +120,22 @@ export async function getConversationDetails(context: AuthorizationContext, id: 
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 101,
-    select: { id: true, direction: true, type: true, status: true, textBody: true, createdAt: true, sentAt: true },
+    select: { id: true, direction: true, type: true, status: true, textBody: true, createdAt: true, sentAt: true,
+      sentByMemberId: true, sentByUserId: true,
+    },
   });
   const page = messages.slice(0, 100);
   const olderCursor = messages.length > 100 ? page.at(-1)?.id ?? null : null;
+  const actorIds = [...new Set(page.flatMap((message) => message.sentByMemberId ? [message.sentByMemberId] : []))];
+  const actors = actorIds.length ? await prisma.workspaceMember.findMany({
+    where: { id: { in: actorIds }, workspaceId: context.workspaceId },
+    select: { id: true, acceptedInvitations: { take: 1, orderBy: { acceptedAt: "desc" }, select: { email: true } } },
+  }) : [];
   return {
     ...conversation,
     messages: page.reverse(),
     olderCursor,
+    actorLabels: Object.fromEntries(actors.map((actor) => [actor.id, actor.acceptedInvitations[0]?.email ?? null])),
   };
 }
 

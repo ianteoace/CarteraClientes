@@ -11,5 +11,5 @@ export function conversationPreview(message: { type: string; textBody: string | 
 }
 
 export function messageStatusLabel(status: string) {
-  return ({ PENDING: "Preparando", SENT: "Enviado", DELIVERED: "Entregado", READ: "Leído", FAILED: "Falló" } as Record<string, string>)[status] ?? "Enviado";
+  return ({ PENDING: "Preparando", PROCESSING: "Enviando", ACCEPTED: "Enviado", SENT: "Enviado", DELIVERED: "Entregado", READ: "Leído", FAILED: "Falló", UNKNOWN: "Estado desconocido" } as Record<string, string>)[status] ?? "Estado desconocido";
 }

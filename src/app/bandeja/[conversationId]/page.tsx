@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { WorkspacePermission } from "@prisma/client";
 
 import { ArchiveControl, ContactAssociation } from "@/components/inbox/conversation-controls";
+import { ReplyComposer } from "@/components/inbox/reply-composer";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getAuthorizationContext, hasAllGroups, hasPermission } from "@/lib/authorization";
 import { getConversationDetails, listLinkableClients, markConversationRead } from "@/lib/conversation-repository";
@@ -10,6 +11,7 @@ import { maskWhatsAppParticipant, messageStatusLabel } from "@/lib/conversation-
 import { listGroups } from "@/lib/group-repository";
 import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
 import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
+import { getWhatsAppServiceWindow } from "@/lib/whatsapp/service-window";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,8 @@ export default async function ConversationPage({ params, searchParams }: {
   params: Promise<{ conversationId: string }>;
   searchParams: Promise<{ before?: string; linkSearch?: string }>;
 }) {
-  if (!await getCurrentUser()) redirect("/login");
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const context = await getAuthorizationContext();
   const modules = await getWorkspaceModules(context);
   if (!isModuleEnabled(modules, WORKSPACE_MODULE.INBOX) || !hasPermission(context, WorkspacePermission.INBOX_VIEW)) notFound();
@@ -27,6 +30,8 @@ export default async function ConversationPage({ params, searchParams }: {
   if (!conversation) notFound();
   await markConversationRead(context, conversationId);
   const canManage = hasPermission(context, WorkspacePermission.INBOX_MANAGE);
+  const canReply = hasPermission(context, WorkspacePermission.INBOX_REPLY);
+  const windowOpen = getWhatsAppServiceWindow(conversation.lastInboundAt).open;
   const canLink = canManage && hasPermission(context, WorkspacePermission.CONTACT_VIEW);
   const canCreate = canManage && hasPermission(context, WorkspacePermission.CONTACT_CREATE);
   const linkSearch = typeof query.linkSearch === "string" ? query.linkSearch : "";
@@ -46,9 +51,12 @@ export default async function ConversationPage({ params, searchParams }: {
       {conversation.olderCursor ? <Link className="inline-block text-sm font-semibold underline underline-offset-4" href={`/bandeja/${conversation.id}?before=${encodeURIComponent(conversation.olderCursor)}`}>Ver mensajes anteriores</Link> : null}
       {conversation.messages.map((message) => <article className={`flex ${message.direction === "OUTBOUND" ? "justify-end" : "justify-start"}`} key={message.id}><div className={`max-w-[88%] min-w-0 border px-4 py-3 text-sm sm:max-w-[70%] ${message.direction === "OUTBOUND" ? "border-foreground bg-foreground text-white" : "border-border bg-surface"}`}>
         <p className="whitespace-pre-wrap break-words">{message.type === "TEXT" ? message.textBody || "Mensaje de texto" : message.type === "TEMPLATE" ? "Mensaje de plantilla" : "Mensaje no compatible todavía."}</p>
-        <div className={`mt-2 flex flex-wrap gap-2 text-xs ${message.direction === "OUTBOUND" ? "text-zinc-300" : "text-muted"}`}><time dateTime={(message.sentAt ?? message.createdAt).toISOString()}>{(message.sentAt ?? message.createdAt).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time>{message.direction === "OUTBOUND" ? <span>· {messageStatusLabel(message.status)}</span> : null}</div>
+        <div className={`mt-2 flex flex-wrap gap-2 text-xs ${message.direction === "OUTBOUND" ? "text-zinc-300" : "text-muted"}`}><time dateTime={(message.sentAt ?? message.createdAt).toISOString()}>{(message.sentAt ?? message.createdAt).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time>{message.direction === "OUTBOUND" ? <span>· {messageStatusLabel(message.status)}</span> : null}{message.direction === "OUTBOUND" && message.sentByUserId ? <span title={message.sentByUserId === user.id ? "Enviado desde tu cuenta" : "Enviado por un integrante del equipo"}>· Enviado por {message.sentByUserId === user.id ? (user.name || user.email || "vos") : (message.sentByMemberId ? conversation.actorLabels[message.sentByMemberId] : null) ?? "integrante del equipo"}</span> : null}</div>
       </div></article>)}
       {!conversation.messages.length ? <p className="text-sm text-muted">Todavía no hay mensajes en esta conversación.</p> : null}
     </section>
+    {canReply && conversation.status === "OPEN" && windowOpen ? <ReplyComposer conversationId={conversation.id} /> :
+      canReply && conversation.status === "ARCHIVED" ? <p className="border-t border-border py-4 text-sm text-muted">Reabrí la conversación para responder.</p> :
+      canReply && !windowOpen ? <p className="border-t border-border py-4 text-sm text-muted">La ventana de atención de WhatsApp finalizó. Para volver a iniciar la conversación necesitás una plantilla. Plantillas próximamente.</p> : null}
   </main>;
 }

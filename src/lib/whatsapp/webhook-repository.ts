@@ -36,22 +36,24 @@ function statusDates(status: WhatsAppMessageStatus, occurredAt: Date) {
 function previousStatusesFor(nextStatus: WhatsAppMessageStatus) {
   switch (nextStatus) {
     case WHATSAPP_MESSAGE_STATUS.SENT:
-      return [WHATSAPP_MESSAGE_STATUS.PENDING];
+      return [WHATSAPP_MESSAGE_STATUS.PENDING, "PROCESSING", "ACCEPTED", "UNKNOWN"];
     case WHATSAPP_MESSAGE_STATUS.DELIVERED:
       return [
         WHATSAPP_MESSAGE_STATUS.PENDING,
+        "PROCESSING", "ACCEPTED", "UNKNOWN",
         WHATSAPP_MESSAGE_STATUS.SENT,
         WHATSAPP_MESSAGE_STATUS.FAILED,
       ];
     case WHATSAPP_MESSAGE_STATUS.READ:
       return [
         WHATSAPP_MESSAGE_STATUS.PENDING,
+        "PROCESSING", "ACCEPTED", "UNKNOWN",
         WHATSAPP_MESSAGE_STATUS.SENT,
         WHATSAPP_MESSAGE_STATUS.DELIVERED,
         WHATSAPP_MESSAGE_STATUS.FAILED,
       ];
     case WHATSAPP_MESSAGE_STATUS.FAILED:
-      return [WHATSAPP_MESSAGE_STATUS.PENDING, WHATSAPP_MESSAGE_STATUS.SENT];
+      return [WHATSAPP_MESSAGE_STATUS.PENDING, "PROCESSING", "ACCEPTED", "UNKNOWN", WHATSAPP_MESSAGE_STATUS.SENT];
     default:
       return [];
   }
@@ -162,12 +164,29 @@ async function processStatus(
   const occurredAt = event.occurredAt ?? receivedAt;
   const existing = await transaction.whatsAppMessage.findUnique({
     where: { providerMessageId: event.providerMessageId },
-    select: { id: true, workspaceId: true },
+    select: { id: true, workspaceId: true, connectionId: true },
   });
 
-  if (existing && existing.workspaceId !== connection.workspaceId) return false;
+  if (existing && (existing.workspaceId !== connection.workspaceId || (existing.connectionId && existing.connectionId !== connection.id))) return false;
 
-  if (!existing) {
+  // El webhook puede llegar antes de que el HTTP de envío actualice el wamid.
+  // Meta devuelve nuestro UUID opaco; así se enlaza con la intención ya persistida.
+  let correlated = existing;
+  if (!correlated && event.clientRequestId) {
+    const intent = await transaction.whatsAppMessage.findUnique({
+      where: { workspaceId_clientRequestId: { workspaceId: connection.workspaceId, clientRequestId: event.clientRequestId } },
+      select: { id: true, workspaceId: true, connectionId: true, providerMessageId: true, direction: true },
+    });
+    if (intent && intent.connectionId === connection.id && intent.direction === "OUTBOUND" &&
+      (intent.providerMessageId === null || intent.providerMessageId === event.providerMessageId)) {
+      await transaction.whatsAppMessage.updateMany({
+        where: { id: intent.id, providerMessageId: null }, data: { providerMessageId: event.providerMessageId },
+      });
+      correlated = intent;
+    }
+  }
+
+  if (!correlated) {
     const recipient = await transaction.campaignRecipient.findFirst({
       where: {
         providerMessageId: event.providerMessageId,
@@ -195,7 +214,7 @@ async function processStatus(
   } else {
     await transaction.whatsAppMessage.updateMany({
       where: {
-        id: existing.id,
+        id: correlated.id,
         workspaceId: connection.workspaceId,
         status: { in: previousStatusesFor(event.status) },
       },
@@ -207,6 +226,19 @@ async function processStatus(
           ? { failureCode: event.failureCode, failureMessage: event.failureMessage }
           : { failureCode: null, failureMessage: null, failedAt: null }),
       },
+    });
+  }
+
+  // Webhooks fuera de orden completan fechas faltantes sin retroceder el estado.
+  if (event.status === WHATSAPP_MESSAGE_STATUS.SENT) {
+    await transaction.whatsAppMessage.updateMany({
+      where: { providerMessageId: event.providerMessageId, sentAt: null, status: { in: ["DELIVERED", "READ"] } },
+      data: { sentAt: occurredAt },
+    });
+  } else if (event.status === WHATSAPP_MESSAGE_STATUS.DELIVERED) {
+    await transaction.whatsAppMessage.updateMany({
+      where: { providerMessageId: event.providerMessageId, deliveredAt: null, status: "READ" },
+      data: { deliveredAt: occurredAt },
     });
   }
 

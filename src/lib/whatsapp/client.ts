@@ -68,6 +68,8 @@ export type SendTextMessageInput = {
   to: string;
   recipientFormat?: WhatsAppRecipientFormat;
   text: string;
+  clientRequestId?: string;
+  signal?: AbortSignal;
 };
 
 async function parseResponse(response: Response): Promise<MetaErrorResponse & MetaSuccessResponse> {
@@ -114,6 +116,7 @@ export class WhatsAppCloudApiClient {
     to: string,
     recipientFormat: WhatsAppRecipientFormat,
     payload: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<WhatsAppSendResult> {
     const formattedPhone = formatPhoneForWhatsApp(to, recipientFormat);
     const endpoint = `https://graph.facebook.com/${encodeURIComponent(this.configuration.apiVersion)}/${encodeURIComponent(this.configuration.phoneNumberId)}/messages`;
@@ -124,6 +127,7 @@ export class WhatsAppCloudApiClient {
         headers: { Authorization: `Bearer ${this.configuration.accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: formattedPhone, ...payload }),
         cache: "no-store",
+        signal,
       });
     } catch {
       throw new WhatsAppApiError("No se pudo conectar con WhatsApp Cloud API.", { httpStatus: 0 });
@@ -162,7 +166,8 @@ export class WhatsAppCloudApiClient {
     return this.sendMessage(input.to, input.recipientFormat ?? "internal", {
       type: "text",
       text: { preview_url: false, body: text },
-    });
+      ...(input.clientRequestId ? { biz_opaque_callback_data: input.clientRequestId } : {}),
+    }, input.signal);
   }
 }
 

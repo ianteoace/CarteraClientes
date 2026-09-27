@@ -33,6 +33,7 @@ type EventBase = {
 export type WhatsAppStatusEvent = EventBase & {
   kind: "status";
   providerMessageId: string;
+  clientRequestId: string | null;
   status: WhatsAppMessageStatus;
   occurredAt: Date | null;
   waId: string | null;
@@ -173,6 +174,9 @@ export function parseWhatsAppWebhookPayload(payload: unknown): ParsedWhatsAppEve
         recognizedItems += 1;
         const timestamp = asString(status.timestamp);
         const failure = statusFailure(status);
+        const opaqueRequestId = asString(status.biz_opaque_callback_data);
+        const clientRequestId = opaqueRequestId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(opaqueRequestId)
+          ? opaqueRequestId : null;
         parsedEvents.push({
           kind: "status",
           eventKey: `status:${providerMessageId}:${mappedStatus}:${timestamp ?? "unknown"}`,
@@ -180,12 +184,14 @@ export function parseWhatsAppWebhookPayload(payload: unknown): ParsedWhatsAppEve
           wabaId,
           phoneNumberId,
           providerMessageId,
+          clientRequestId,
           status: mappedStatus,
           occurredAt: parseWhatsAppTimestamp(timestamp),
           waId: asString(status.recipient_id),
           ...failure,
           payload: {
             providerMessageId,
+            clientRequestId,
             status: mappedStatus,
             timestamp,
             waId: asString(status.recipient_id),

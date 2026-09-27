@@ -48,7 +48,7 @@ export const MODULE_PERMISSIONS: Readonly<Partial<Record<WorkspaceModuleKey, rea
   TICKETS: [WorkspacePermission.TICKET_VIEW, WorkspacePermission.TICKET_CREATE, WorkspacePermission.TICKET_EDIT, WorkspacePermission.TICKET_ASSIGN, WorkspacePermission.TICKET_RESOLVE],
   INCIDENTS: [WorkspacePermission.INCIDENT_VIEW, WorkspacePermission.INCIDENT_CREATE, WorkspacePermission.INCIDENT_EDIT, WorkspacePermission.INCIDENT_ASSIGN, WorkspacePermission.INCIDENT_RESOLVE],
   ORDERS: [WorkspacePermission.ORDER_VIEW, WorkspacePermission.ORDER_CREATE, WorkspacePermission.ORDER_EDIT, WorkspacePermission.ORDER_MANAGE_STATUS, WorkspacePermission.ORDER_MANAGE_PAYMENT],
-  INBOX: [WorkspacePermission.INBOX_VIEW, WorkspacePermission.INBOX_MANAGE],
+  INBOX: [WorkspacePermission.INBOX_VIEW, WorkspacePermission.INBOX_REPLY, WorkspacePermission.INBOX_MANAGE],
 };
 
 export function getPermissionModule(permission: WorkspacePermission): WorkspaceModuleKey | null {

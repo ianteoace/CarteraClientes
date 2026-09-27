@@ -103,6 +103,7 @@ enum WorkspacePermission {
   ORDER_MANAGE_STATUS
   ORDER_MANAGE_PAYMENT
   INBOX_VIEW
+  INBOX_REPLY
   INBOX_MANAGE
   WORKSPACE_SETTINGS_VIEW
   WORKSPACE_SETTINGS_EDIT
@@ -143,6 +144,7 @@ model WorkspaceMember {
   linkedIncidentTickets     IncidentTicket[]      @relation("IncidentTicketLinker")
   scheduledCampaigns        Campaign[]            @relation("CampaignScheduler")
   conversationReadStates    ConversationReadState[]
+  sentWhatsAppMessages      WhatsAppMessage[]     @relation("InboxMessageSender")
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -520,7 +522,10 @@ model WhatsAppMessage {
   connectionId      String?
   clientId          String?
   conversationId    String?
-  providerMessageId String              @unique
+  providerMessageId String?             @unique
+  clientRequestId   String?
+  sentByMemberId    String?
+  sentByUserId      String?
   phoneNumberId     String
   waId              String?
   direction         String
@@ -540,8 +545,11 @@ model WhatsAppMessage {
   connection        WhatsAppConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
   conversation      Conversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  sentByMember      WorkspaceMember?    @relation("InboxMessageSender", fields: [sentByMemberId], references: [id], onDelete: SetNull)
 
+  @@unique([workspaceId, clientRequestId])
   @@index([workspaceId, createdAt])
+  @@index([sentByMemberId])
   @@index([connectionId, createdAt])
   @@index([clientId, createdAt])
   @@index([phoneNumberId, createdAt])
