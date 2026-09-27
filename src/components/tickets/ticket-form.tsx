@@ -14,7 +14,7 @@ export function TicketForm({ contacts, members, initialContactId, origin }: {
   contacts: ContactOption[];
   members: MemberOption[];
   initialContactId?: string;
-  origin?: { conversationId: string; sourceMessageId?: string; description?: string };
+  origin?: { conversationId: string; sourceMessageIds: string[]; description?: string };
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -48,7 +48,7 @@ export function TicketForm({ contacts, members, initialContactId, origin }: {
   }
 
   return <form className="mt-7 max-w-3xl space-y-7" onSubmit={submit}>
-    {origin ? <><input type="hidden" name="conversationId" value={origin.conversationId} /><input type="hidden" name="sourceMessageId" value={origin.sourceMessageId ?? ""} /><input type="hidden" name="contactId" value={initialContactId ?? ""} /></> : null}
+    {origin ? <><input type="hidden" name="conversationId" value={origin.conversationId} />{origin.sourceMessageIds.map((id) => <input key={id} type="hidden" name="sourceMessageIds" value={id} />)}<input type="hidden" name="contactId" value={initialContactId ?? ""} /></> : null}
     <section className="border-y border-border py-5">
       {origin ? <p className="mb-3 text-sm text-muted">Se vinculará con la conversación de WhatsApp. El contacto está fijado para esta operación.</p> : null}
       {!origin ? <><label className="field-label" htmlFor="ticket-contact-search">Buscar contacto</label>

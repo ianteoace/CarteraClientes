@@ -60,7 +60,7 @@ export async function createTicketAction(formData: FormData): Promise<TicketActi
       participantIds: formData.getAll("participantIds").map(String),
       origin: formData.has("conversationId") ? {
         conversationId: String(formData.get("conversationId") ?? ""),
-        sourceMessageId: String(formData.get("sourceMessageId") ?? "") || null,
+        sourceMessageIds: formData.getAll("sourceMessageIds").map(String),
       } : undefined,
     });
     if (!ticket) return { success: false, error: "No se pudo crear el ticket." };

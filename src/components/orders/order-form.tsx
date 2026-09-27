@@ -9,7 +9,7 @@ import { ORDER_FULFILLMENT_LABELS, ORDER_FULFILLMENT_TYPE } from "@/lib/order-ty
 
 type ContactOption = { id: string; name: string; phone: string; email: string | null };
 
-export function OrderForm({ contacts, initialContactId, origin }: { contacts: ContactOption[]; initialContactId?: string; origin?: { conversationId: string; sourceMessageId?: string } }) {
+export function OrderForm({ contacts, initialContactId, origin }: { contacts: ContactOption[]; initialContactId?: string; origin?: { conversationId: string; sourceMessageIds: string[] } }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [contactId, setContactId] = useState(initialContactId ?? "");
@@ -38,7 +38,7 @@ export function OrderForm({ contacts, initialContactId, origin }: { contacts: Co
   }
 
   return <form className="mt-7 max-w-4xl space-y-8" onSubmit={submit}>
-    {origin ? <><input type="hidden" name="conversationId" value={origin.conversationId} /><input type="hidden" name="sourceMessageId" value={origin.sourceMessageId ?? ""} /><input type="hidden" name="contactId" value={initialContactId ?? ""} /></> : null}
+    {origin ? <><input type="hidden" name="conversationId" value={origin.conversationId} />{origin.sourceMessageIds.map((id) => <input key={id} type="hidden" name="sourceMessageIds" value={id} />)}<input type="hidden" name="contactId" value={initialContactId ?? ""} /></> : null}
     <section className="grid gap-4 border-y border-border py-5 sm:grid-cols-2">
       {origin ? <p className="sm:col-span-2 text-sm text-muted">Se vinculará con la conversación de WhatsApp. Cargá los ítems manualmente.</p> : <label className="field-label sm:col-span-2">Buscar contacto<input className="field mt-1" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, teléfono o email" /></label>}
       <label className="field-label sm:col-span-2">Contacto *<select className="field mt-1" name={origin ? undefined : "contactId"} disabled={Boolean(origin)} required value={contactId} onChange={(event) => setContactId(event.target.value)}><option value="">Seleccioná un contacto</option>{visibleContacts.map((contact) => <option value={contact.id} key={contact.id}>{contact.name} · {contact.phone}</option>)}</select></label>

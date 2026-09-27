@@ -50,12 +50,17 @@ async function run() {
     const blocked = await prisma.conversation.create({ data: { workspaceId: workspace.id, externalParticipantId: `qa-conversation-blocked-${runId}`, clientId: blockedContact.id, lastMessageAt: now } });
     const foreignConversation = await prisma.conversation.create({ data: { workspaceId: foreign.id, externalParticipantId: `qa-conversation-foreign-${runId}`, clientId: foreignContact.id, lastMessageAt: now } });
     const inbound = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId: conversation.id, phoneNumberId: "qa", direction: "INBOUND", type: "TEXT", status: "RECEIVED", textBody: "QA inbound source" } });
+    const inbound2 = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId: conversation.id, phoneNumberId: "qa", direction: "INBOUND", type: "TEXT", status: "RECEIVED", textBody: "QA second source", createdAt: new Date(now.getTime() + 1000) } });
+    const inbound3 = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId: conversation.id, phoneNumberId: "qa", direction: "INBOUND", type: "TEXT", status: "RECEIVED", textBody: "QA third source", createdAt: new Date(now.getTime() + 2000) } });
     const otherInbound = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId: secondConversation.id, phoneNumberId: "qa", direction: "INBOUND", type: "TEXT", status: "RECEIVED", textBody: "QA other source" } });
+    const foreignInbound = await prisma.whatsAppMessage.create({ data: { workspaceId: foreign.id, conversationId: foreignConversation.id, phoneNumberId: "qa", direction: "INBOUND", type: "TEXT", status: "RECEIVED", textBody: "QA foreign source" } });
+    const unsupported = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId: conversation.id, phoneNumberId: "qa", direction: "INBOUND", type: "UNSUPPORTED", status: "RECEIVED" } });
     const outbound = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId: conversation.id, phoneNumberId: "qa", direction: "OUTBOUND", type: "TEXT", status: "ACCEPTED", textBody: "QA outbound" } });
-    const ticketInput = (origin?: { conversationId: string; sourceMessageId?: string }) => ({ contactId: contact.id, title: "QA ticket", description: "QA detail", origin });
-    const orderInput = (origin?: { conversationId: string; sourceMessageId?: string }) => ({ contactId: contact.id, items: [{ description: "QA item", quantity: "2", unitPrice: "100" }], origin });
+    const ticketInput = (origin?: { conversationId: string; sourceMessageId?: string; sourceMessageIds?: string[] }) => ({ contactId: contact.id, title: "QA ticket", description: "QA detail", origin });
+    const orderInput = (origin?: { conversationId: string; sourceMessageId?: string; sourceMessageIds?: string[] }) => ({ contactId: contact.id, items: [{ description: "QA item", quantity: "2", unitPrice: "100" }], origin });
 
-    const ticket = await createTicket(owner, ticketInput({ conversationId: conversation.id, sourceMessageId: inbound.id }));
+    const selectedIds = [inbound3.id, inbound.id, inbound2.id];
+    const ticket = await createTicket(owner, ticketInput({ conversationId: conversation.id, sourceMessageIds: selectedIds }));
     assert.ok(ticket); pass("A");
     assert.equal((await getConversationCaseCreationContext(owner, CASE_TYPE.TICKET, { conversationId: unlinked.id }))?.contactMissing, true);
     await denied(createTicket(owner, ticketInput({ conversationId: unlinked.id }))); pass("B");
@@ -71,15 +76,26 @@ async function run() {
     const link = await prisma.caseConversation.findUniqueOrThrow({ where: { caseId_conversationId: { caseId: ticket!.id, conversationId: conversation.id } } });
     assert.equal(link.workspaceId, workspace.id);
     await denied(prisma.caseConversation.create({ data: { workspaceId: workspace.id, caseId: ticket!.id, conversationId: conversation.id } })); pass("H");
-    assert.equal(link.sourceMessageId, inbound.id); pass("I");
+    assert.equal(link.sourceMessageId, null);
+    assert.equal(await prisma.caseConversationSourceMessage.count({ where: { caseConversationId: link.id } }), 3); pass("I");
+    await denied(prisma.caseConversationSourceMessage.create({ data: { workspaceId: workspace.id, caseConversationId: link.id, messageId: inbound.id } }));
+    await denied(prisma.caseConversationSourceMessage.create({ data: { workspaceId: foreign.id, caseConversationId: link.id, messageId: foreignInbound.id } }));
+    const caseCountBeforeInvalidOrigins = await prisma.case.count({ where: { workspaceId: workspace.id } });
     await denied(createTicket(owner, ticketInput({ conversationId: conversation.id, sourceMessageId: otherInbound.id }))); pass("J");
     await denied(createTicket(owner, ticketInput({ conversationId: conversation.id, sourceMessageId: outbound.id }))); pass("K");
+    await denied(createTicket(owner, ticketInput({ conversationId: conversation.id, sourceMessageIds: [inbound.id, unsupported.id] })));
+    await denied(createTicket(owner, ticketInput({ conversationId: conversation.id, sourceMessageIds: [inbound.id, foreignInbound.id] })));
+    assert.equal(await prisma.case.count({ where: { workspaceId: workspace.id } }), caseCountBeforeInvalidOrigins);
+    const preview = await getConversationCaseCreationContext(owner, CASE_TYPE.TICKET, { conversationId: conversation.id, sourceMessageIds: selectedIds });
+    assert.deepEqual(preview?.sourceMessages.map(({ id }) => id), [inbound.id, inbound2.id, inbound3.id]);
     await prisma.$transaction((transaction) => linkCaseToConversation(owner, ticket!, { conversationId: secondConversation.id }, transaction));
     assert.equal(await prisma.caseConversation.count({ where: { caseId: ticket!.id } }), 2); pass("L");
-    const ticket2 = await createTicket(owner, ticketInput({ conversationId: conversation.id }));
-    assert.ok(ticket2 && ticket2.id !== ticket!.id); pass("M");
+    const ticket2 = await createTicket(owner, ticketInput({ conversationId: conversation.id, sourceMessageIds: [inbound2.id, inbound2.id] }));
+    assert.ok(ticket2 && ticket2.id !== ticket!.id);
+    const ticket2Link = await prisma.caseConversation.findUniqueOrThrow({ where: { caseId_conversationId: { caseId: ticket2!.id, conversationId: conversation.id } } });
+    assert.equal(await prisma.caseConversationSourceMessage.count({ where: { caseConversationId: ticket2Link.id } }), 1); pass("M");
 
-    const order = await createOrder(owner, orderInput({ conversationId: conversation.id, sourceMessageId: inbound.id }));
+    const order = await createOrder(owner, orderInput({ conversationId: conversation.id, sourceMessageIds: selectedIds }));
     assert.ok(order); pass("N");
     await prisma.workspaceModule.update({ where: { workspaceId_key: { workspaceId: workspace.id, key: "ORDERS" } }, data: { enabled: false } });
     await denied(createOrder(owner, orderInput({ conversationId: conversation.id }))); pass("O");
@@ -91,8 +107,8 @@ async function run() {
     const related = await listConversationCases(owner, conversation.id);
     assert.ok(related.some(({ case: item }) => item.id === ticket!.id)); pass("S");
     assert.ok(related.some(({ case: item }) => item.id === order!.id)); pass("T");
-    assert.ok((await getCaseOrigin(owner, ticket!.id)).some(({ conversation: item }) => item.id === conversation.id)); pass("U");
-    assert.ok((await getCaseOrigin(owner, order!.id)).some(({ conversation: item }) => item.id === conversation.id)); pass("V");
+    assert.ok((await getCaseOrigin(owner, ticket!.id)).some(({ conversation: item, sourceMessages }) => item.id === conversation.id && sourceMessages.length === 3 && sourceMessages[0].message.textBody === inbound.textBody)); pass("U");
+    assert.ok((await getCaseOrigin(owner, order!.id)).some(({ conversation: item, sourceMessages }) => item.id === conversation.id && sourceMessages.length === 3)); pass("V");
     const noInbox = { ...owner, permissions: new Set([...owner.permissions].filter((permission) => permission !== WorkspacePermission.INBOX_VIEW)) };
     await denied(getCaseOrigin(noInbox, ticket!.id)); pass("W");
     assert.ok(!(await listWorkspaceActivity(noInbox, "all")).items.some((item) => item.entityType === "CONVERSATION"));
@@ -107,13 +123,13 @@ async function run() {
     await prisma.conversation.update({ where: { id: conversation.id }, data: { clientId: contact.id, status: "ARCHIVED" } });
     const archived = await createTicket(owner, ticketInput({ conversationId: conversation.id })); assert.ok(archived); pass("Z");
     const activities = await prisma.activity.findMany({ where: { workspaceId: workspace.id, action: "CONVERSATION_CASE_LINKED" } });
-    assert.ok(activities.some((item) => item.entityId === conversation.id && (item.metadata as { caseType?: string }).caseType === CASE_TYPE.TICKET)); pass("AA");
+    assert.ok(activities.some((item) => item.entityId === conversation.id && (item.metadata as { caseType?: string; sourceMessageCount?: number }).caseType === CASE_TYPE.TICKET && (item.metadata as { sourceMessageCount?: number }).sourceMessageCount === 3)); pass("AA");
     assert.ok(activities.every((item) => !JSON.stringify(item.metadata).includes(inbound.textBody!))); pass("AB");
     await prisma.workspaceModule.update({ where: { workspaceId_key: { workspaceId: workspace.id, key: "INBOX" } }, data: { enabled: false } });
     assert.ok(await getTicket(owner, ticket!.number)); assert.ok(await getOrder(owner, order!.number)); pass("AC");
     assert.equal(await prisma.caseConversation.count({ where: { workspaceId: workspace.id } }), 6); pass("AD");
     await prisma.workspaceModule.update({ where: { workspaceId_key: { workspaceId: workspace.id, key: "INBOX" } }, data: { enabled: true } });
-    assert.equal(await prisma.caseConversation.count({ where: { sourceMessageId: inbound.id } }), 2); pass("AE");
+    assert.equal(await prisma.caseConversationSourceMessage.count({ where: { messageId: inbound.id } }), 2); pass("AE");
     const normalTicket = await createTicket(owner, ticketInput());
     const normalOrder = await createOrder(owner, orderInput());
     assert.ok(normalTicket && normalOrder && await prisma.caseConversation.count({ where: { caseId: { in: [normalTicket.id, normalOrder.id] } } }) === 0); pass("AG");
@@ -127,6 +143,7 @@ async function run() {
   }
   assert.equal(await prisma.workspace.count({ where: { id: { in: ids } } }), 0);
   assert.equal(await prisma.caseConversation.count({ where: { workspaceId: { in: ids } } }), 0);
+  assert.equal(await prisma.caseConversationSourceMessage.count({ where: { workspaceId: { in: ids } } }), 0);
 }
 
 async function staticChecks() {
@@ -136,16 +153,22 @@ async function staticChecks() {
   const orderPage = await readFile(path.join(root, "src/app/pedidos/[number]/page.tsx"), "utf8");
   const webhook = await readFile(path.join(root, "src/lib/whatsapp/webhook-service.ts"), "utf8");
   const reply = await readFile(path.join(root, "src/lib/whatsapp/conversation-send-service.ts"), "utf8");
+  const selection = await readFile(path.join(root, "src/components/inbox/message-selection.tsx"), "utf8");
+  const css = await readFile(path.join(root, "src/app/globals.css"), "utf8");
+  const migration = await readFile(path.join(root, "prisma/migrations/20260927223000_support_multiple_case_source_messages/migration.sql"), "utf8");
   assert.ok(conversationPage.includes("Crear ticket desde este mensaje") && conversationPage.includes("Crear pedido desde este mensaje"));
   assert.ok(!conversationPage.includes("providerMessageId") && !conversationPage.includes("phoneNumberId") && !conversationPage.includes("process.env")); pass("AF");
   assert.ok(ticketPage.includes("CaseOrigin") && orderPage.includes("CaseOrigin"));
   assert.ok(webhook.includes("processWhatsAppWebhookPayload") && reply.includes("sendConversationReply")); pass("AH");
+  assert.ok(conversationPage.includes("MessageSelectionActions") && conversationPage.includes('message.direction === "INBOUND" && message.type === "TEXT"'));
+  assert.ok(selection.includes('params.append("sourceMessageIds", id)') && selection.includes("Seleccionar mensajes") && css.includes(".inbox-message-select { display:flex") && css.includes("min-height:44px")); pass("AI");
+  assert.ok(migration.includes('INSERT INTO "CaseConversationSourceMessage"') && migration.includes('c."sourceMessageId"') && migration.includes('Keep the legacy column temporarily')); pass("AJ");
 }
 
 async function main() {
   await staticChecks();
   await run();
-  const labels = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH"];
+  const labels = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ"];
   assert.deepEqual([...passed].sort(), labels.sort());
   console.log(`CaseConversation QA: ${passed.size}/${labels.length} OK; temporary workspaces and links cleaned`);
 }

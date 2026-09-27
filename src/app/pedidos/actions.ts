@@ -57,7 +57,7 @@ export async function createOrderAction(formData: FormData): Promise<OrderAction
       currency: "ARS",
       origin: formData.has("conversationId") ? {
         conversationId: String(formData.get("conversationId") ?? ""),
-        sourceMessageId: String(formData.get("sourceMessageId") ?? "") || null,
+        sourceMessageIds: formData.getAll("sourceMessageIds").map(String),
       } : undefined,
     });
     if (!order) return { success: false, error: "No se pudo crear el pedido." };

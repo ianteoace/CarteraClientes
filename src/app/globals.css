@@ -131,6 +131,13 @@ body:has(.inbox-page) .app-content { height:100dvh; min-height:0; overflow:hidde
 .inbox-message-bubble { border-radius:5px 5px 5px 1px; border-color:#e6e3dd; background:#fff; color:var(--text); }
 .inbox-message-outbound .inbox-message-bubble { border-color:rgb(37 211 102 / 30%); border-radius:5px 5px 1px 5px; background:rgb(37 211 102 / 12%); color:#14231a; }
 .inbox-message-meta { color:#647067; }
+.inbox-selection-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; max-width:100%; }
+.inbox-selection-actions > span { margin-right:4px; }
+.inbox-message-select { display:flex; flex:none; align-items:center; justify-content:center; width:44px; min-height:44px; cursor:pointer; }
+.inbox-message-select input { width:18px; height:18px; accent-color:var(--accent); cursor:pointer; }
+.inbox-message-select + .inbox-message-bubble { max-width:calc(100% - 44px); }
+.inbox-message-select input:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.inbox-message-selected .inbox-message-bubble { border-color:var(--accent) !important; box-shadow:0 0 0 1px var(--accent-border); }
 .inbox-status-read { color:#0f766e; }
 .app-page > header::after { content:""; position:absolute; bottom:-1px; left:0; width:54px; height:3px; background:var(--accent-border); }
 .app-page > header { position:relative; }

@@ -5,6 +5,7 @@ import { WorkspacePermission } from "@prisma/client";
 import { ArchiveControl, ContactAssociation } from "@/components/inbox/conversation-controls";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { ReplyComposer } from "@/components/inbox/reply-composer";
+import { MessageSelectionActions, MessageSelectionProvider, SelectableMessage } from "@/components/inbox/message-selection";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getAuthorizationContext, hasAllGroups, hasPermission } from "@/lib/authorization";
 import { getConversationDetails, listConversations, listLinkableClients, markConversationRead } from "@/lib/conversation-repository";
@@ -48,7 +49,7 @@ export default async function ConversationPage({ params, searchParams }: {
     listConversations(context, {}),
   ]);
   const name = conversation.client?.name ?? conversation.externalDisplayName ?? maskWhatsAppParticipant(conversation.externalParticipantId);
-  return <main className="app-page inbox-page"><div className="inbox-frame"><ConversationList page={conversationPage} selectedId={conversation.id} /><div className="inbox-thread"><div className="inbox-thread-header-wrap">
+  return <main className="app-page inbox-page"><div className="inbox-frame"><ConversationList page={conversationPage} selectedId={conversation.id} /><div className="inbox-thread"><MessageSelectionProvider key={conversation.id}><div className="inbox-thread-header-wrap">
     <Link className="inbox-back-link text-xs font-semibold text-muted hover:text-foreground lg:hidden" href="/bandeja">← Volver a Bandeja</Link>
     <header className="inbox-thread-header flex flex-wrap items-start justify-between gap-3 border-b border-border px-6 pb-4 pt-4 max-md:px-4"><div className="min-w-0"><p className="inbox-channel-label eyebrow">WhatsApp</p><h1 className="break-words text-xl font-semibold tracking-[-.04em]">{name}</h1><p className="mt-1 text-xs text-muted">{maskWhatsAppParticipant(conversation.externalParticipantId)}{conversation.client?.company ? ` · ${conversation.client.company}` : ""}</p>{conversation.status === "ARCHIVED" ? <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted">Archivada</p> : null}</div><div className="flex flex-wrap gap-2">{canManage ? <ArchiveControl archived={conversation.status === "ARCHIVED"} conversationId={conversation.id} /> : null}</div></header>
   </div><div className="inbox-action-bar">
@@ -58,6 +59,7 @@ export default async function ConversationPage({ params, searchParams }: {
       {conversation.client && hasPermission(context, WorkspacePermission.CONTACT_VIEW) ? <Link className="btn-secondary" href={`/clientes/${conversation.client.id}`}>Ver contacto</Link> : null}
       {!conversation.clientId && (canLink || canCreate) ? <p className="inbox-action-hint">Vinculá o creá un contacto para generar operaciones.</p> : null}
     </div>
+    {conversation.clientId ? <MessageSelectionActions conversationId={conversation.id} canCreateTicket={canCreateTicket} canCreateOrder={canCreateOrder} /> : null}
     {!conversation.clientId && (canLink || canCreate) ? <div className="inbox-contact-tools">
       {canLink ? <form action={`/bandeja/${conversation.id}`} className="inbox-link-search" method="get"><input aria-label="Buscar contacto para vincular" className="field min-w-0 flex-1" defaultValue={linkSearch} name="linkSearch" placeholder="Buscar contacto existente" type="search" /><button className="btn-secondary" type="submit">Buscar</button></form> : null}
       <ContactAssociation conversationId={conversation.id} participantId={conversation.externalParticipantId} displayName={conversation.externalDisplayName} contacts={contacts} groups={groups} groupRequired={!hasAllGroups(context)} canLink={canLink} canCreate={canCreate} />
@@ -66,14 +68,14 @@ export default async function ConversationPage({ params, searchParams }: {
   </div><div className="inbox-thread-scroll inbox-scroll-region">
     <section aria-label="Mensajes" className="inbox-message-list py-6">
       {conversation.olderCursor ? <Link className="inline-block text-sm font-semibold underline underline-offset-4" href={`/bandeja/${conversation.id}?before=${encodeURIComponent(conversation.olderCursor)}`}>Ver mensajes anteriores</Link> : null}
-      {conversation.messages.map((message) => <article className={`message-item flex ${message.direction === "OUTBOUND" ? "inbox-message-outbound justify-end" : "inbox-message-inbound justify-start"}`} key={message.id}><div className="inbox-message-bubble max-w-[88%] min-w-0 border px-3 py-2.5 text-sm sm:max-w-[68%]">
+      {conversation.messages.map((message) => <SelectableMessage id={message.id} eligible={Boolean(conversation.clientId && message.direction === "INBOUND" && message.type === "TEXT")} outbound={message.direction === "OUTBOUND"} key={message.id}><div className="inbox-message-bubble max-w-[88%] min-w-0 border px-3 py-2.5 text-sm sm:max-w-[68%]">
         <p className="whitespace-pre-wrap break-words">{message.type === "TEXT" ? message.textBody || "Mensaje de texto" : message.type === "TEMPLATE" ? "Mensaje de plantilla" : "Mensaje no compatible todavía."}</p>
         <div className={`inbox-message-meta mt-2 flex flex-wrap gap-2 text-xs ${message.direction === "OUTBOUND" ? "" : "text-muted"}`}><time dateTime={(message.sentAt ?? message.createdAt).toISOString()}>{(message.sentAt ?? message.createdAt).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time>{message.direction === "OUTBOUND" ? <span className={message.status === "FAILED" ? "text-danger" : message.status === "READ" ? "inbox-status-read" : ""}>· {messageStatusLabel(message.status)}</span> : null}{message.direction === "OUTBOUND" && message.sentByUserId ? <span title={message.sentByUserId === user.id ? "Enviado desde tu cuenta" : "Enviado por un integrante del equipo"}>· Enviado por {message.sentByUserId === user.id ? (user.name || user.email || "vos") : (message.sentByMemberId ? conversation.actorLabels[message.sentByMemberId] : null) ?? "integrante del equipo"}</span> : null}</div>
         {conversation.clientId && message.direction === "INBOUND" && message.type === "TEXT" && (canCreateTicket || canCreateOrder) ? <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">{canCreateTicket ? <Link className="underline underline-offset-2" href={`/tickets/nuevo?conversationId=${encodeURIComponent(conversation.id)}&sourceMessageId=${encodeURIComponent(message.id)}`}>Crear ticket desde este mensaje</Link> : null}{canCreateOrder ? <Link className="underline underline-offset-2" href={`/pedidos/nuevo?conversationId=${encodeURIComponent(conversation.id)}&sourceMessageId=${encodeURIComponent(message.id)}`}>Crear pedido desde este mensaje</Link> : null}</div> : null}
-      </div></article>)}
+      </div></SelectableMessage>)}
       {!conversation.messages.length ? <p className="text-sm text-muted">Todavía no hay mensajes en esta conversación.</p> : null}
     </section>
     </div><div className="inbox-composer">{canReply && conversation.status === "OPEN" && windowOpen ? <ReplyComposer conversationId={conversation.id} /> :
       canReply && conversation.status === "ARCHIVED" ? <p className="py-4 text-sm text-muted">Reabrí la conversación para responder.</p> :
-      canReply && !windowOpen ? <p className="py-4 text-sm text-muted">La ventana de atención de WhatsApp finalizó. Para volver a iniciar la conversación necesitás una plantilla. Plantillas próximamente.</p> : null}</div></div></div></main>;
+      canReply && !windowOpen ? <p className="py-4 text-sm text-muted">La ventana de atención de WhatsApp finalizó. Para volver a iniciar la conversación necesitás una plantilla. Plantillas próximamente.</p> : null}</div></MessageSelectionProvider></div></div></main>;
 }

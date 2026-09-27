@@ -550,8 +550,10 @@ model WhatsAppMessage {
   client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
   conversation      Conversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   sentByMember      WorkspaceMember?    @relation("InboxMessageSender", fields: [sentByMemberId], references: [id], onDelete: SetNull)
-  sourceCaseConversations CaseConversation[]
+  sourceCaseConversations CaseConversationSourceMessage[]
+  legacySourceCaseConversations CaseConversation[]
 
+  @@unique([id, workspaceId])
   @@unique([workspaceId, clientRequestId])
   @@index([workspaceId, createdAt])
   @@index([sentByMemberId])
@@ -601,12 +603,28 @@ model CaseConversation {
   case              Case             @relation(fields: [caseId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   conversation      Conversation     @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   sourceMessage     WhatsAppMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  sourceMessages    CaseConversationSourceMessage[]
   createdByMember   WorkspaceMember? @relation("CaseConversationCreator", fields: [createdByMemberId], references: [id], onDelete: SetNull)
 
+  @@unique([id, workspaceId])
   @@unique([caseId, conversationId])
   @@index([workspaceId, conversationId, createdAt])
   @@index([workspaceId, caseId])
   @@index([sourceMessageId])
+}
+
+model CaseConversationSourceMessage {
+  id                 String           @id @default(cuid())
+  workspaceId        String
+  caseConversationId String
+  messageId          String
+  createdAt          DateTime         @default(now())
+  caseConversation   CaseConversation @relation(fields: [caseConversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  message            WhatsAppMessage  @relation(fields: [messageId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([caseConversationId, messageId])
+  @@index([messageId])
+  @@index([workspaceId, caseConversationId])
 }
 
 model ConversationReadState {

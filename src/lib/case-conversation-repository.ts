@@ -14,8 +14,16 @@ import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export class CaseConversationValidationError extends Error {}
 
-export type CaseConversationOrigin = { conversationId: string; sourceMessageId?: string | null };
+export type CaseConversationOrigin = { conversationId: string; sourceMessageIds?: string[]; sourceMessageId?: string | null };
 export type ConversationCaseKind = typeof CASE_TYPE.TICKET | typeof CASE_TYPE.ORDER;
+
+function getSourceMessageIds(origin: CaseConversationOrigin) {
+  const raw = origin.sourceMessageIds ?? (origin.sourceMessageId ? [origin.sourceMessageId] : []);
+  if (raw.length > 50 || raw.some((id) => typeof id !== "string" || !id.trim())) {
+    throw new CaseConversationValidationError("Seleccioná hasta 50 mensajes válidos.");
+  }
+  return [...new Set(raw.map((id) => id.trim()))];
+}
 
 function caseAccess(kind: ConversationCaseKind) {
   return kind === CASE_TYPE.TICKET
@@ -37,18 +45,19 @@ export async function getConversationCaseCreationContext(
     select: { id: true, clientId: true, client: { select: { id: true, name: true } } },
   });
   if (!conversation) return null;
-  if (!conversation.clientId || !conversation.client) return { conversation, sourceMessage: null, contactMissing: true as const };
+  if (!conversation.clientId || !conversation.client) return { conversation, sourceMessages: [], contactMissing: true as const };
   const contact = await prisma.client.findFirst({
     where: { id: conversation.clientId, ...getClientScopeFilter(context) }, select: { id: true },
   });
   if (!contact) return null;
-  const sourceMessageId = origin.sourceMessageId?.trim();
-  const sourceMessage = sourceMessageId ? await prisma.whatsAppMessage.findFirst({
-    where: { id: sourceMessageId, conversationId: conversation.id, workspaceId: context.workspaceId, direction: "INBOUND", type: "TEXT" },
-    select: { id: true, textBody: true },
-  }) : null;
-  if (sourceMessageId && !sourceMessage) throw new CaseConversationValidationError("El mensaje de origen no pertenece a esta conversación.");
-  return { conversation, sourceMessage, contactMissing: false as const };
+  const sourceMessageIds = getSourceMessageIds(origin);
+  const sourceMessages = sourceMessageIds.length ? await prisma.whatsAppMessage.findMany({
+    where: { id: { in: sourceMessageIds }, conversationId: conversation.id, workspaceId: context.workspaceId, direction: "INBOUND", type: "TEXT" },
+    select: { id: true, textBody: true, createdAt: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  }) : [];
+  if (sourceMessages.length !== sourceMessageIds.length) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación.");
+  return { conversation, sourceMessages, contactMissing: false as const };
 }
 
 export async function linkCaseToConversation(
@@ -77,25 +86,27 @@ export async function linkCaseToConversation(
   }
   const contact = await transaction.client.count({ where: { id: caseRecord.contactId, ...getClientScopeFilter(context) } });
   if (contact !== 1) throw new CaseConversationValidationError("Ya no tenés acceso al contacto de esta conversación.");
-  const sourceMessageId = origin.sourceMessageId?.trim() || null;
-  if (sourceMessageId) {
+  const sourceMessageIds = getSourceMessageIds(origin);
+  if (sourceMessageIds.length) {
     const source = await transaction.whatsAppMessage.count({
-      where: { id: sourceMessageId, workspaceId: context.workspaceId, conversationId: conversation.id, direction: "INBOUND", type: "TEXT" },
+      where: { id: { in: sourceMessageIds }, workspaceId: context.workspaceId, conversationId: conversation.id, direction: "INBOUND", type: "TEXT" },
     });
-    if (source !== 1) throw new CaseConversationValidationError("El mensaje de origen no pertenece a esta conversación.");
+    if (source !== sourceMessageIds.length) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación.");
   }
   const link = await transaction.caseConversation.create({ data: {
     workspaceId: context.workspaceId,
     caseId: caseRecord.id,
     conversationId: conversation.id,
-    sourceMessageId,
     createdByMemberId: context.memberId,
     createdByUserId: context.userId,
   } });
+  if (sourceMessageIds.length) await transaction.caseConversationSourceMessage.createMany({
+    data: sourceMessageIds.map((messageId) => ({ workspaceId: context.workspaceId, caseConversationId: link.id, messageId })),
+  });
   await recordActivity({
     ...activityActor(context), entityType: ACTIVITY_ENTITY.CONVERSATION, entityId: conversation.id,
     action: ACTIVITY_ACTION.CONVERSATION_CASE_LINKED,
-    metadata: { caseType: kind, caseNumber: caseRecord.number },
+    metadata: { caseType: kind, caseNumber: caseRecord.number, sourceMessageCount: sourceMessageIds.length },
   }, transaction);
   return link;
 }
@@ -140,7 +151,10 @@ export async function listCaseConversations(context: AuthorizationContext, caseI
     },
     select: {
       id: true, createdAt: true, conversation: { select: { id: true, client: { select: { name: true } }, externalDisplayName: true } },
-      sourceMessage: { select: { textBody: true, direction: true, type: true } },
+      sourceMessages: {
+        select: { messageId: true, message: { select: { textBody: true, direction: true, type: true, createdAt: true, sentAt: true } } },
+        orderBy: [{ message: { createdAt: "asc" } }, { messageId: "asc" }],
+      },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
