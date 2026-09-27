@@ -55,7 +55,7 @@ export function ContactAssociation({ conversationId, participantId, displayName,
     if (result.success) router.refresh(); else setError(result.error);
   }
 
-  return <section className="border-b border-border py-5">
+  return <section className="inbox-contact-association">
     <div className="flex flex-wrap gap-2">{canLink ? <button className="btn-secondary" onClick={() => setMode(mode === "link" ? null : "link")} type="button">Vincular contacto existente</button> : null}{canCreate ? <button className="btn-secondary" onClick={() => setMode(mode === "create" ? null : "create")} type="button">Crear contacto</button> : null}</div>
     {mode === "link" ? <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={submitLink}>
       <label className="min-w-0 flex-1 text-sm">Contacto<select className="field mt-1" name="clientId" required defaultValue=""><option value="" disabled>Elegí un contacto</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.phone}</option>)}</select></label>
