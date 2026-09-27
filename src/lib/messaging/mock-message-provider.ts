@@ -12,6 +12,8 @@ type MockMessageProviderOptions = {
 };
 
 export class MockMessageProvider implements MessageProvider {
+  readonly supportsFreeformCampaigns = true;
+
   constructor(private readonly options: MockMessageProviderOptions = {}) {}
 
   async sendMessage(input: SendMessageInput): Promise<SendMessageResult> {

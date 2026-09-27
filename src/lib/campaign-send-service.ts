@@ -19,6 +19,12 @@ import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 export class CampaignSendError extends Error {}
 
+function requireSafeCampaignProvider(provider: MessageProvider) {
+  if (!provider.supportsFreeformCampaigns) {
+    throw new CampaignSendError("Las campañas actuales solo funcionan en modo mock. Meta requerirá templates aprobados y no puede recibir texto libre.");
+  }
+}
+
 function safeProviderError(error: unknown) {
   const message = error instanceof Error ? error.message : "El proveedor rechazó el mensaje.";
   return message.slice(0, 500);
@@ -28,6 +34,7 @@ export async function sendCampaign(
   context: AuthorizationContext, campaignId: string,
   provider: MessageProvider = getMessageProvider(),
 ) {
+  requireSafeCampaignProvider(provider);
   await requireModule(context, WORKSPACE_MODULE.CAMPAIGNS);
   requirePermission(context, WorkspacePermission.CAMPAIGN_SEND);
   const claim = await claimCampaignForSending(context, campaignId);
@@ -48,7 +55,7 @@ export async function processClaimedCampaign(
   campaignId: string,
   provider: MessageProvider = getMessageProvider(),
 ) {
-
+  requireSafeCampaignProvider(provider);
   await requireModule(context, WORKSPACE_MODULE.CAMPAIGNS);
 
   const campaign = await getCampaignPendingRecipients(context, campaignId);

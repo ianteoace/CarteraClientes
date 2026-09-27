@@ -10,5 +10,6 @@ export type SendMessageResult = {
 };
 
 export interface MessageProvider {
+  readonly supportsFreeformCampaigns: boolean;
   sendMessage(input: SendMessageInput): Promise<SendMessageResult>;
 }
