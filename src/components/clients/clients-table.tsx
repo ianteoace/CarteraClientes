@@ -50,7 +50,7 @@ export function ClientsTable({ clients, onEdit, onDelete, selectedIds, onToggle,
         </tbody>
       </table>
     </div>
-    <div className="border-y border-border md:hidden">
+    <div className="client-mobile-list border-y border-border md:hidden">
       {canSelect ? <label className="flex min-h-11 items-center gap-3 border-b border-border px-2 text-xs font-medium text-muted"><input checked={allVisibleSelected} onChange={onToggleVisible} type="checkbox" />Seleccionar visibles</label> : null}
       <div className="divide-y divide-border">{clients.map((client) => <article className="flex gap-3 px-2 py-3" key={client.id}>
         {canSelect ? <input aria-label={`Seleccionar ${client.name}`} checked={selectedIds.has(client.id)} className="mt-1 h-5 w-5 shrink-0" onChange={() => onToggle(client.id)} type="checkbox" /> : null}
