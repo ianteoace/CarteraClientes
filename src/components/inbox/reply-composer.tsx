@@ -34,10 +34,10 @@ export function ReplyComposer({ conversationId }: { conversationId: string }) {
     } finally { setPending(false); }
   }
 
-  return <div className="sticky bottom-0 border-t border-border bg-background py-4">
-    <p className="mb-2 text-xs text-muted">Podés responder por WhatsApp · solo texto</p>
+  return <div className="border-t border-border bg-background py-4">
+    <p className="inbox-channel-label mb-2 text-xs text-muted">Podés responder por WhatsApp · solo texto</p>
     <div className="flex items-end gap-2">
-      <textarea aria-label="Respuesta de WhatsApp" className="field min-h-12 min-w-0 flex-1 resize-y" maxLength={WHATSAPP_TEXT_LIMIT} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="Escribí tu respuesta" rows={2} value={body} />
+      <textarea aria-label="Respuesta de WhatsApp" className="field inbox-composer-input min-h-12 min-w-0 flex-1 resize-y" maxLength={WHATSAPP_TEXT_LIMIT} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="Escribí tu respuesta" rows={2} value={body} />
       <button className="btn-primary shrink-0" disabled={pending || !body.trim()} onClick={() => void submit()} type="button">{pending ? "Enviando…" : "Enviar"}</button>
     </div>
     {error ? <p className="mt-2 text-sm text-danger" role="alert">{error}</p> : null}
