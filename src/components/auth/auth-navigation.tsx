@@ -8,6 +8,7 @@ const links = [
   ["Mi cartera", "/"],
   ["Contactos", "/clientes"],
   ["Grupos", "/grupos"],
+  ["Bandeja", "/bandeja"],
   ["Campañas", "/campanas"],
   ["Pedidos", "/pedidos"],
   ["Tickets", "/tickets"],
@@ -17,14 +18,15 @@ const links = [
   ["Configuración", "/configuracion"],
 ] as const;
 
-type Visible = { contacts: boolean; groups: boolean; campaigns: boolean; orders: boolean; tickets: boolean; incidents: boolean; team: boolean; activity: boolean; settings: boolean };
+type Visible = { contacts: boolean; groups: boolean; campaigns: boolean; orders: boolean; tickets: boolean; incidents: boolean; inbox: boolean; team: boolean; activity: boolean; settings: boolean };
 
 export function AuthNavigation({ accountName, visible }: { accountName?: string; visible?: Visible }) {
   const pathname = usePathname();
-  if (!accountName || !/^\/$|^\/(?:clientes|grupos|campanas|pedidos|tickets|incidencias|equipo|actividad|configuracion)(?:\/|$)/.test(pathname)) return null;
+  if (!accountName || !/^\/$|^\/(?:clientes|grupos|bandeja|campanas|pedidos|tickets|incidencias|equipo|actividad|configuracion)(?:\/|$)/.test(pathname)) return null;
   const visibleLinks = links.filter(([, href]) => href === "/"
     || (href === "/clientes" && visible?.contacts)
     || (href === "/grupos" && visible?.groups)
+    || (href === "/bandeja" && visible?.inbox)
     || (href === "/campanas" && visible?.campaigns)
     || (href === "/pedidos" && visible?.orders)
     || (href === "/tickets" && visible?.tickets)

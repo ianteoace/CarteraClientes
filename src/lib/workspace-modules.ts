@@ -5,6 +5,7 @@ export const WORKSPACE_MODULE = {
   TICKETS: "TICKETS",
   INCIDENTS: "INCIDENTS",
   ORDERS: "ORDERS",
+  INBOX: "INBOX",
 } as const;
 
 export type WorkspaceModuleKey = typeof WORKSPACE_MODULE[keyof typeof WORKSPACE_MODULE];
@@ -15,6 +16,7 @@ export const AVAILABLE_MODULES = [
   WORKSPACE_MODULE.TICKETS,
   WORKSPACE_MODULE.INCIDENTS,
   WORKSPACE_MODULE.ORDERS,
+  WORKSPACE_MODULE.INBOX,
 ] as const;
 
 export const NEW_WORKSPACE_MODULE_DEFAULTS: Readonly<Record<WorkspaceModuleKey, boolean>> = {
@@ -22,6 +24,7 @@ export const NEW_WORKSPACE_MODULE_DEFAULTS: Readonly<Record<WorkspaceModuleKey, 
   TICKETS: false,
   INCIDENTS: false,
   ORDERS: false,
+  INBOX: false,
 };
 
 export const WORKSPACE_MODULE_DETAILS: Readonly<Record<WorkspaceModuleKey, { label: string; description: string }>> = {
@@ -29,6 +32,7 @@ export const WORKSPACE_MODULE_DETAILS: Readonly<Record<WorkspaceModuleKey, { lab
   TICKETS: { label: "Tickets", description: "Gestión de solicitudes y problemas de contactos." },
   INCIDENTS: { label: "Incidencias", description: "Problemas generales relacionados con varios tickets." },
   ORDERS: { label: "Pedidos", description: "Registrá ventas, items, pagos y entregas asociadas a tus contactos." },
+  INBOX: { label: "Bandeja", description: "Centralizá las conversaciones con tus contactos." },
 };
 
 export function isKnownWorkspaceModule(value: string): value is WorkspaceModuleKey {
@@ -44,6 +48,7 @@ export const MODULE_PERMISSIONS: Readonly<Partial<Record<WorkspaceModuleKey, rea
   TICKETS: [WorkspacePermission.TICKET_VIEW, WorkspacePermission.TICKET_CREATE, WorkspacePermission.TICKET_EDIT, WorkspacePermission.TICKET_ASSIGN, WorkspacePermission.TICKET_RESOLVE],
   INCIDENTS: [WorkspacePermission.INCIDENT_VIEW, WorkspacePermission.INCIDENT_CREATE, WorkspacePermission.INCIDENT_EDIT, WorkspacePermission.INCIDENT_ASSIGN, WorkspacePermission.INCIDENT_RESOLVE],
   ORDERS: [WorkspacePermission.ORDER_VIEW, WorkspacePermission.ORDER_CREATE, WorkspacePermission.ORDER_EDIT, WorkspacePermission.ORDER_MANAGE_STATUS, WorkspacePermission.ORDER_MANAGE_PAYMENT],
+  INBOX: [WorkspacePermission.INBOX_VIEW, WorkspacePermission.INBOX_MANAGE],
 };
 
 export function getPermissionModule(permission: WorkspacePermission): WorkspaceModuleKey | null {

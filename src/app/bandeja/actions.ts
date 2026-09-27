@@ -1,0 +1,62 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { WorkspacePermission } from "@prisma/client";
+
+import { getAuthorizationContext, requirePermission } from "@/lib/authorization";
+import { createClient, DuplicatePhoneError } from "@/lib/client-repository";
+import {
+  ConversationNotFoundError, getConversationDetails, linkConversationContact, linkNewlyCreatedContact,
+  requireInboxAccess, setConversationArchived,
+} from "@/lib/conversation-repository";
+
+type ActionResult = { success: true } | { success: false; error: string };
+
+function safeError(error: unknown): ActionResult {
+  if (error instanceof DuplicatePhoneError) return { success: false, error: "Ese teléfono ya existe. Buscá y vinculá el contacto existente." };
+  if (error instanceof ConversationNotFoundError) return { success: false, error: "La conversación no está disponible." };
+  return { success: false, error: error instanceof Error && ["ClientValidationError", "PhoneNormalizationError", "EmailValidationError", "AuthorizationError", "WorkspaceModuleError"].includes(error.name)
+    ? error.message : "No se pudo completar la acción." };
+}
+
+export async function linkConversationAction(id: string, clientId: string): Promise<ActionResult> {
+  try {
+    await linkConversationContact(await getAuthorizationContext(), id, clientId);
+    revalidatePath(`/bandeja/${id}`);
+    revalidatePath("/bandeja");
+    return { success: true };
+  } catch (error) { return safeError(error); }
+}
+
+export async function createContactFromConversationAction(id: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const context = await getAuthorizationContext();
+    await requireInboxAccess(context, WorkspacePermission.INBOX_MANAGE);
+    requirePermission(context, WorkspacePermission.CONTACT_CREATE);
+    const conversation = await getConversationDetails(context, id);
+    if (!conversation || conversation.clientId) throw new ConversationNotFoundError();
+    const client = await createClient(context, {
+      name: String(formData.get("name") ?? ""),
+      phone: String(formData.get("phone") ?? ""),
+      company: String(formData.get("company") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      notes: String(formData.get("notes") ?? ""),
+      optIn: false,
+      groupIds: formData.getAll("groupIds").map(String),
+    });
+    await linkNewlyCreatedContact(context, id, client.id);
+    revalidatePath(`/bandeja/${id}`);
+    revalidatePath("/bandeja");
+    revalidatePath("/clientes");
+    return { success: true };
+  } catch (error) { return safeError(error); }
+}
+
+export async function setConversationArchivedAction(id: string, archived: boolean): Promise<ActionResult> {
+  try {
+    await setConversationArchived(await getAuthorizationContext(), id, archived);
+    revalidatePath(`/bandeja/${id}`);
+    revalidatePath("/bandeja");
+    return { success: true };
+  } catch (error) { return safeError(error); }
+}

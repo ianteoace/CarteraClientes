@@ -96,6 +96,9 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.ORDER_ITEMS_UPDATED: return `actualizó ${metadata.itemCount ?? 0} item(s) del Pedido #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.ORDER_PAYMENT_STATUS_CHANGED: return `cambió el pago del Pedido #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.ORDER_FULFILLMENT_UPDATED: return `actualizó la entrega del Pedido #${metadata.number ?? "-"}`;
+    case ACTIVITY_ACTION.CONVERSATION_CONTACT_LINKED: return `vinculó una conversación con ${name}`;
+    case ACTIVITY_ACTION.CONVERSATION_ARCHIVED: return "archivó una conversación";
+    case ACTIVITY_ACTION.CONVERSATION_REOPENED: return "reabrió una conversación";
     default: return "realizó una acción en la cartera";
   }
 }
@@ -105,5 +108,5 @@ export function activityEntityLabel(entityType: string, metadata?: Prisma.JsonVa
     const type = text(objectMetadata(metadata ?? null), "type");
     return type === "INCIDENT" ? "Incidencia" : type === "ORDER" ? "Pedido" : "Ticket";
   }
-  return ({ CONTACT: "Contacto", GROUP: "Grupo", CAMPAIGN: "Campaña", WORKSPACE: "Configuración", MEMBER: "Equipo", INVITATION: "Invitación" } as Record<string, string>)[entityType] ?? "Actividad";
+  return ({ CONTACT: "Contacto", GROUP: "Grupo", CAMPAIGN: "Campaña", WORKSPACE: "Configuración", MEMBER: "Equipo", INVITATION: "Invitación", CONVERSATION: "Conversación" } as Record<string, string>)[entityType] ?? "Actividad";
 }

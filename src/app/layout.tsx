@@ -25,6 +25,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     orders: Boolean(modules && isModuleEnabled(modules, WORKSPACE_MODULE.ORDERS)) && hasPermission(context, WorkspacePermission.ORDER_VIEW),
     tickets: Boolean(modules && isModuleEnabled(modules, WORKSPACE_MODULE.TICKETS)) && hasPermission(context, WorkspacePermission.TICKET_VIEW),
     incidents: Boolean(modules && isModuleEnabled(modules, WORKSPACE_MODULE.INCIDENTS)) && hasPermission(context, WorkspacePermission.INCIDENT_VIEW) && hasAllGroups(context),
+    inbox: Boolean(modules && isModuleEnabled(modules, WORKSPACE_MODULE.INBOX)) && hasPermission(context, WorkspacePermission.INBOX_VIEW),
     team: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     activity: hasPermission(context, WorkspacePermission.TEAM_VIEW),
     settings: hasPermission(context, WorkspacePermission.WORKSPACE_SETTINGS_VIEW),

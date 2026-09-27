@@ -24,6 +24,7 @@ model Client {
   campaignRecipients CampaignRecipient[]
   cases              Case[]
   whatsappMessages   WhatsAppMessage[]
+  conversations      Conversation[]
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, phoneNormalized])
@@ -48,6 +49,7 @@ model Workspace {
   whatsappConnections   WhatsAppConnection[]
   whatsappMessages      WhatsAppMessage[]
   whatsappWebhookEvents WhatsAppWebhookEvent[]
+  conversations         Conversation[]
 }
 
 model WorkspaceModule {
@@ -100,6 +102,8 @@ enum WorkspacePermission {
   ORDER_EDIT
   ORDER_MANAGE_STATUS
   ORDER_MANAGE_PAYMENT
+  INBOX_VIEW
+  INBOX_MANAGE
   WORKSPACE_SETTINGS_VIEW
   WORKSPACE_SETTINGS_EDIT
   TEAM_VIEW
@@ -138,6 +142,7 @@ model WorkspaceMember {
   incidentNotes             IncidentNote[]        @relation("IncidentNoteAuthor")
   linkedIncidentTickets     IncidentTicket[]      @relation("IncidentTicketLinker")
   scheduledCampaigns        Campaign[]            @relation("CampaignScheduler")
+  conversationReadStates    ConversationReadState[]
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -503,6 +508,7 @@ model WhatsAppConnection {
   updatedAt          DateTime          @updatedAt
   workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages           WhatsAppMessage[]
+  conversations      Conversation[]
 
   @@index([workspaceId])
   @@index([wabaId])
@@ -513,6 +519,7 @@ model WhatsAppMessage {
   workspaceId       String
   connectionId      String?
   clientId          String?
+  conversationId    String?
   providerMessageId String              @unique
   phoneNumberId     String
   waId              String?
@@ -532,11 +539,52 @@ model WhatsAppMessage {
   workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   connection        WhatsAppConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  conversation      Conversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
   @@index([connectionId, createdAt])
   @@index([clientId, createdAt])
   @@index([phoneNumberId, createdAt])
+  @@index([conversationId, createdAt, id])
+}
+
+model Conversation {
+  id                    String                  @id @default(cuid())
+  workspaceId           String
+  channel               String                  @default("WHATSAPP")
+  clientId              String?
+  whatsappConnectionId  String?
+  externalParticipantId String
+  externalDisplayName   String?
+  status                String                  @default("OPEN")
+  lastMessageAt         DateTime
+  lastInboundAt         DateTime?
+  lastOutboundAt        DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  workspace             Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client                Client?                 @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  whatsappConnection    WhatsAppConnection?     @relation(fields: [whatsappConnectionId], references: [id], onDelete: SetNull)
+  messages              WhatsAppMessage[]
+  readStates            ConversationReadState[]
+
+  @@unique([workspaceId, whatsappConnectionId, externalParticipantId])
+  @@index([workspaceId, lastMessageAt, id])
+  @@index([workspaceId, clientId])
+}
+
+model ConversationReadState {
+  id             String          @id @default(cuid())
+  conversationId String
+  memberId       String
+  lastReadAt     DateTime
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  member         WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, memberId])
+  @@index([memberId, lastReadAt])
 }
 
 model WhatsAppWebhookEvent {

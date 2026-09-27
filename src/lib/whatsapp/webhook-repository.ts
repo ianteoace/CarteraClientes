@@ -1,7 +1,7 @@
 import { Prisma, RecipientStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { getInternalPhoneCandidatesForWhatsApp } from "@/lib/whatsapp/phone";
+import { attachWhatsAppMessageToConversation, findWhatsAppClientId } from "@/lib/conversation-core";
 import {
   WHATSAPP_MESSAGE_DIRECTION,
   WHATSAPP_MESSAGE_STATUS,
@@ -57,33 +57,13 @@ function previousStatusesFor(nextStatus: WhatsAppMessageStatus) {
   }
 }
 
-async function findMatchingClientId(
-  transaction: Transaction,
-  workspaceId: string,
-  whatsAppPhone: string,
-) {
-  let candidates: string[];
-  try {
-    candidates = getInternalPhoneCandidatesForWhatsApp(whatsAppPhone);
-  } catch {
-    return null;
-  }
-
-  const clients = await transaction.client.findMany({
-    where: { workspaceId, phoneNormalized: { in: candidates } },
-    select: { id: true },
-    take: 2,
-  });
-  return clients.length === 1 ? clients[0].id : null;
-}
-
 async function processIncomingMessage(
   transaction: Transaction,
   event: WhatsAppIncomingMessageEvent,
   connection: { id: string; workspaceId: string },
   receivedAt: Date,
 ) {
-  const clientId = await findMatchingClientId(transaction, connection.workspaceId, event.from);
+  const clientId = await findWhatsAppClientId(transaction, connection.workspaceId, event.from);
   const sentAt = event.occurredAt ?? receivedAt;
   const created = await transaction.whatsAppMessage.createMany({
     data: [{
@@ -101,6 +81,20 @@ async function processIncomingMessage(
       sentAt,
     }],
     skipDuplicates: true,
+  });
+  const message = await transaction.whatsAppMessage.findUniqueOrThrow({
+    where: { providerMessageId: event.providerMessageId },
+    select: { id: true },
+  });
+  await attachWhatsAppMessageToConversation(transaction, {
+    messageId: message.id,
+    workspaceId: connection.workspaceId,
+    connectionId: connection.id,
+    participantId: event.from,
+    direction: "INBOUND",
+    occurredAt: sentAt,
+    profileName: event.profileName,
+    clientId,
   });
   return created.count === 1;
 }
@@ -217,6 +211,21 @@ async function processStatus(
   }
 
   await updateCampaignRecipient(transaction, connection.workspaceId, event, occurredAt);
+  const message = await transaction.whatsAppMessage.findUniqueOrThrow({
+    where: { providerMessageId: event.providerMessageId },
+    select: { id: true, waId: true, clientId: true, sentAt: true, createdAt: true },
+  });
+  if (message.waId) {
+    await attachWhatsAppMessageToConversation(transaction, {
+      messageId: message.id,
+      workspaceId: connection.workspaceId,
+      connectionId: connection.id,
+      participantId: message.waId,
+      direction: "OUTBOUND",
+      occurredAt: message.sentAt ?? message.createdAt,
+      clientId: message.clientId,
+    });
+  }
   return true;
 }
 
