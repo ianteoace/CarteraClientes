@@ -9,6 +9,7 @@ import { messageStatusLabel } from "@/lib/conversation-presentation";
 import { MetaCampaignTemplateRequiredError, MetaWhatsAppProvider } from "@/lib/messaging/meta-whatsapp-provider";
 import { MockMessageProvider } from "@/lib/messaging/mock-message-provider";
 import { getEffectivePermissions } from "@/lib/permission-presets";
+import { PERMISSION_GROUPS } from "@/lib/team-labels";
 import { prisma } from "@/lib/prisma";
 import { WhatsAppApiError } from "@/lib/whatsapp/client";
 import { sendConversationReply } from "@/lib/whatsapp/conversation-send-service";
@@ -90,7 +91,9 @@ async function run() {
     assert.ok(admin.permissions.has(WorkspacePermission.INBOX_REPLY)); await send(admin); pass("B");
     assert.ok(agent.permissions.has(WorkspacePermission.INBOX_REPLY)); await send(agent); pass("C");
     await deny(send(viewer)); pass("D");
-    await deny(send({ ...agent, permissions: getEffectivePermissions(WorkspaceRole.AGENT, [{ permission: WorkspacePermission.INBOX_REPLY, allowed: false }]) })); pass("E");
+    await deny(send({ ...agent, permissions: getEffectivePermissions(WorkspaceRole.AGENT, [{ permission: WorkspacePermission.INBOX_REPLY, allowed: false }]) }));
+    assert.ok(PERMISSION_GROUPS.some((group) => group.permissions.some(([permission]) => permission === WorkspacePermission.INBOX_REPLY)));
+    pass("E");
     await prisma.workspaceModule.update({ where: { workspaceId_key: { workspaceId: workspace.id, key: "INBOX" } }, data: { enabled: false } });
     await deny(send(owner)); pass("F");
     await prisma.workspaceModule.update({ where: { workspaceId_key: { workspaceId: workspace.id, key: "INBOX" } }, data: { enabled: true } });

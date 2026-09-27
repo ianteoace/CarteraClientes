@@ -75,6 +75,14 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Bandeja",
+    permissions: [
+      [WorkspacePermission.INBOX_VIEW, "Ver conversaciones"],
+      [WorkspacePermission.INBOX_REPLY, "Responder mensajes"],
+      [WorkspacePermission.INBOX_MANAGE, "Gestionar conversaciones"],
+    ],
+  },
+  {
     title: "Equipo",
     permissions: [
       [WorkspacePermission.TEAM_VIEW, "Ver"],
