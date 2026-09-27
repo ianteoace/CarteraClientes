@@ -1,10 +1,29 @@
 import { normalizePhone, PhoneNormalizationError } from "@/lib/phone";
 
-export type WhatsAppRecipientFormat = "internal" | "meta-explicit";
+export type WhatsAppRecipientFormat = "internal" | "meta-explicit" | "conversation";
+
+const ARGENTINE_MOBILE_WITH_NINE = /^549(\d{10})$/;
+
+function metaExplicitPhone(phone: string) {
+  const trimmedPhone = phone.trim();
+  if (!trimmedPhone || !/^\d+$/.test(trimmedPhone)) {
+    throw new PhoneNormalizationError();
+  }
+  return trimmedPhone;
+}
+
+/** Conserva el wa_id como identidad y adapta solo el destinatario outbound. */
+export function formatWhatsAppRecipientForSend(externalParticipantId: string) {
+  const waId = metaExplicitPhone(externalParticipantId);
+  const argentineMobile = waId.match(ARGENTINE_MOBILE_WITH_NINE);
+  return argentineMobile ? `54${argentineMobile[1]}` : waId;
+}
 
 /**
  * Adapta un teléfono interno al formato esperado por Meta.
  *
+ * `internal` adapta el teléfono normalizado de Billetera.
+ * `conversation` adapta el wa_id inbound solo al construir el destinatario de envío.
  * `meta-explicit` está reservado para destinatarios técnicos que ya fueron
  * escritos en el formato exacto de Meta (por ejemplo, un smoke test). En ese
  * modo solo se recortan los extremos y se valida que haya dígitos; no se
@@ -17,15 +36,15 @@ export function formatPhoneForWhatsApp(
   const trimmedPhone = phone.trim();
 
   if (format === "meta-explicit") {
-    if (!trimmedPhone || !/^\d+$/.test(trimmedPhone)) {
-      throw new PhoneNormalizationError();
-    }
+    return metaExplicitPhone(trimmedPhone);
+  }
 
-    return trimmedPhone;
+  if (format === "conversation") {
+    return formatWhatsAppRecipientForSend(trimmedPhone);
   }
 
   const normalizedPhone = normalizePhone(trimmedPhone);
-  const argentineMobile = normalizedPhone.match(/^549(\d{10})$/);
+  const argentineMobile = normalizedPhone.match(ARGENTINE_MOBILE_WITH_NINE);
 
   // Cloud API acepta estos móviles argentinos sin el 9 internacional.
   return argentineMobile ? `54${argentineMobile[1]}` : normalizedPhone;

@@ -8,17 +8,22 @@ import type { AuthorizationContext } from "@/lib/authorization";
 import { messageStatusLabel } from "@/lib/conversation-presentation";
 import { MetaCampaignTemplateRequiredError, MetaWhatsAppProvider } from "@/lib/messaging/meta-whatsapp-provider";
 import { MockMessageProvider } from "@/lib/messaging/mock-message-provider";
+import { normalizePhone } from "@/lib/phone";
 import { getEffectivePermissions } from "@/lib/permission-presets";
 import { PERMISSION_GROUPS } from "@/lib/team-labels";
 import { prisma } from "@/lib/prisma";
-import { WhatsAppApiError } from "@/lib/whatsapp/client";
+import { WhatsAppApiError, WhatsAppCloudApiClient } from "@/lib/whatsapp/client";
 import { sendConversationReply } from "@/lib/whatsapp/conversation-send-service";
+import { getWhatsAppConfiguration } from "@/lib/whatsapp/config";
+import { formatPhoneForWhatsApp, formatWhatsAppRecipientForSend } from "@/lib/whatsapp/phone";
 import { getWhatsAppServiceWindow } from "@/lib/whatsapp/service-window";
 import { processWhatsAppWebhookPayload } from "@/lib/whatsapp/webhook-service";
 
 const runId = randomUUID();
 const passed = new Set<string>();
+const recipientPassed = new Set<string>();
 const pass = (...labels: string[]) => labels.forEach((label) => passed.add(label));
+const passRecipient = (...labels: string[]) => labels.forEach((label) => recipientPassed.add(label));
 const deny = (promise: Promise<unknown>) => assert.rejects(promise);
 const request = (conversationId: string, body = "Hola desde QA", clientRequestId = randomUUID()) => ({ conversationId, body, clientRequestId });
 
@@ -39,7 +44,44 @@ function statusPayload(phoneNumberId: string, wabaId: string, wamid: string, waI
   } }] }] };
 }
 
+function inboundPayload(phoneNumberId: string, wabaId: string, wamid: string, waId: string) {
+  return { object: "whatsapp_business_account", entry: [{ id: wabaId, changes: [{ field: "messages", value: {
+    metadata: { phone_number_id: phoneNumberId },
+    contacts: [{ wa_id: waId }],
+    messages: [{ id: wamid, from: waId, timestamp: String(Math.floor(Date.now() / 1000)), type: "text", text: { body: "QA inbound" } }],
+  } }] }] };
+}
+
+async function testRecipientFormatting() {
+  const waId = "5491123456789";
+  const outbound = "541123456789";
+  assert.equal(formatWhatsAppRecipientForSend(waId), outbound); passRecipient("A");
+  assert.equal(formatPhoneForWhatsApp(waId, "conversation"), outbound);
+  const technicalRecipient = process.env.WHATSAPP_TEST_RECIPIENT?.trim();
+  if (technicalRecipient && /^54\d{10}$/.test(technicalRecipient)) {
+    assert.equal(formatWhatsAppRecipientForSend(`549${technicalRecipient.slice(2)}`), technicalRecipient);
+  }
+  passRecipient("B");
+  assert.equal(formatWhatsAppRecipientForSend("551123456789"), "551123456789"); passRecipient("D");
+  assert.equal(formatWhatsAppRecipientForSend("549123"), "549123"); passRecipient("E");
+  assert.equal(formatPhoneForWhatsApp(waId, "meta-explicit"), waId);
+  assert.equal(formatPhoneForWhatsApp(outbound, "meta-explicit"), outbound); passRecipient("F");
+  assert.equal(normalizePhone("+54 9 11 2345-6789"), waId); passRecipient("G");
+  const mock = new MockMessageProvider();
+  assert.ok((await mock.sendMessage({ phone: outbound, message: "QA", recipientName: "QA" })).providerMessageId.startsWith("mock_"));
+  passRecipient("K");
+  let technicalTo = "";
+  const fakeFetch: typeof fetch = async (_url, init) => {
+    technicalTo = String(JSON.parse(String(init?.body)).to);
+    return new Response(JSON.stringify({ messages: [{ id: "wamid.qa.technical" }] }), { status: 200 });
+  };
+  const provider = new MetaWhatsAppProvider(new WhatsAppCloudApiClient({ accessToken: "qa-only", phoneNumberId: "123", wabaId: "456", apiVersion: "v23.0" }, fakeFetch));
+  await provider.sendTemplateMessage({ phone: outbound, recipientFormat: "meta-explicit", templateName: "hello_world", languageCode: "en_US" });
+  assert.equal(technicalTo, outbound); passRecipient("L");
+}
+
 async function run() {
+  await testRecipientFormatting();
   const oldEnv = Object.fromEntries(["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_WABA_ID", "WHATSAPP_API_VERSION"].map((name) => [name, process.env[name]]));
   const workspace = await prisma.workspace.create({ data: { name: `QA Inbox Reply ${runId}` } });
   const foreign = await prisma.workspace.create({ data: { name: `QA Inbox Reply Foreign ${runId}` } });
@@ -159,6 +201,28 @@ async function run() {
     const detailSource = await readFile(path.join(process.cwd(), "src/app/bandeja/[conversationId]/page.tsx"), "utf8");
     assert.ok(detailSource.includes("Enviado por") && detailSource.includes("sentByUserId")); pass("AI");
     const contactless = await send(owner, request(unknown.id)); assert.ok(contactless.messageId); pass("AK");
+    const argentineWaId = "5491123456789";
+    const inboundId = `wamid.qa.inbound.${runId}`;
+    await processWhatsAppWebhookPayload(inboundPayload(phoneNumberId, wabaId, inboundId, argentineWaId));
+    const inboundMessage = await prisma.whatsAppMessage.findUniqueOrThrow({ where: { providerMessageId: inboundId } });
+    const argentineConversation = await prisma.conversation.findUniqueOrThrow({ where: { id: inboundMessage.conversationId! } });
+    assert.equal(argentineConversation.externalParticipantId, argentineWaId); passRecipient("H");
+    await processWhatsAppWebhookPayload(inboundPayload(phoneNumberId, wabaId, `wamid.qa.inbound-repeat.${runId}`, argentineWaId));
+    assert.equal(await prisma.conversation.count({ where: { workspaceId: workspace.id, whatsappConnectionId: connection.id, externalParticipantId: argentineWaId } }), 1);
+    assert.equal((await prisma.whatsAppMessage.findUniqueOrThrow({ where: { providerMessageId: `wamid.qa.inbound-repeat.${runId}` } })).conversationId, argentineConversation.id);
+    passRecipient("I");
+    let replyTo = "";
+    const replyFetch: typeof fetch = async (_url, init) => {
+      replyTo = String(JSON.parse(String(init?.body)).to);
+      return new Response(JSON.stringify({ messages: [{ id: `wamid.qa.reply.${runId}` }] }), { status: 200 });
+    };
+    const replyProvider = new MetaWhatsAppProvider(new WhatsAppCloudApiClient(getWhatsAppConfiguration(), replyFetch));
+    const reply = await send(owner, request(argentineConversation.id), replyProvider);
+    assert.equal(replyTo, "541123456789");
+    assert.equal((await prisma.whatsAppMessage.findUniqueOrThrow({ where: { id: reply.messageId } })).waId, argentineWaId);
+    passRecipient("J");
+    assert.equal((await prisma.conversation.findUniqueOrThrow({ where: { id: argentineConversation.id } })).externalParticipantId, argentineWaId);
+    passRecipient("C");
     assert.equal(await prisma.activity.count({ where: { workspaceId: workspace.id } }), beforeActivity); pass("AL");
     const mock = new MockMessageProvider(); assert.ok((await mock.sendMessage({ phone: waId, message: "QA", recipientName: "QA" })).providerMessageId.startsWith("mock_")); pass("AM");
     await assert.rejects(new MetaWhatsAppProvider().sendMessage(), MetaCampaignTemplateRequiredError); pass("AN");
@@ -175,7 +239,9 @@ async function run() {
   assert.equal(await prisma.whatsAppWebhookEvent.count({ where: { wabaId } }), 0);
   const labels = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", ..."ABCDEFGHIJKLMN".split("").map((suffix) => `A${suffix}`)];
   assert.deepEqual([...passed].sort(), labels.sort());
+  assert.deepEqual([...recipientPassed].sort(), "ABCDEFGHIJKL".split(""));
   console.log(`Inbox Reply QA: ${passed.size}/${labels.length} OK; temporary data cleaned`);
+  console.log(`Conversation recipient QA: ${recipientPassed.size}/12 OK; temporary data cleaned`);
 }
 
 run().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => prisma.$disconnect());

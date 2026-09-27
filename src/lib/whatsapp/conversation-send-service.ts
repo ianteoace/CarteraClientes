@@ -65,8 +65,7 @@ export async function sendConversationReply(
   if (!getWhatsAppServiceWindow(conversation.lastInboundAt, now).open) {
     throw new InboxReplyError("La ventana de atención de WhatsApp finalizó. Para responder necesitás una plantilla.");
   }
-  let recipient: string;
-  try { recipient = formatPhoneForWhatsApp(conversation.externalParticipantId, "meta-explicit"); }
+  try { formatPhoneForWhatsApp(conversation.externalParticipantId, "conversation"); }
   catch { throw new InboxReplyError("El destinatario de WhatsApp no es válido."); }
 
   let configuration: ReturnType<typeof getWhatsAppConfiguration>;
@@ -90,7 +89,7 @@ export async function sendConversationReply(
         sentByMemberId: context.memberId,
         sentByUserId: context.userId,
         phoneNumberId: connection.phoneNumberId,
-        waId: recipient,
+        waId: conversation.externalParticipantId,
         direction: "OUTBOUND",
         type: "TEXT",
         status: "PENDING",
@@ -122,7 +121,7 @@ export async function sendConversationReply(
   try {
     const sender = options.sender ?? new MetaWhatsAppProvider();
     const result = await sender.sendTextMessage({
-      phone: recipient, recipientFormat: "meta-explicit", text: body, clientRequestId: input.clientRequestId,
+      phone: conversation.externalParticipantId, recipientFormat: "conversation", text: body, clientRequestId: input.clientRequestId,
       signal: AbortSignal.timeout(15_000),
     });
     // Un webhook puede haberse adelantado: nunca degradar SENT/DELIVERED/READ.
