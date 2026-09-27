@@ -552,6 +552,7 @@ model WhatsAppMessage {
   sentByMember      WorkspaceMember?    @relation("InboxMessageSender", fields: [sentByMemberId], references: [id], onDelete: SetNull)
   sourceCaseConversations CaseConversationSourceMessage[]
   legacySourceCaseConversations CaseConversation[]
+  attachments       WhatsAppMessageAttachment[]
 
   @@unique([id, workspaceId])
   @@unique([workspaceId, clientRequestId])
@@ -561,6 +562,30 @@ model WhatsAppMessage {
   @@index([clientId, createdAt])
   @@index([phoneNumberId, createdAt])
   @@index([conversationId, createdAt, id])
+}
+
+model WhatsAppMessageAttachment {
+  id                  String          @id @default(cuid())
+  workspaceId         String
+  messageId           String
+  kind                String
+  metaMediaId         String?
+  mimeType            String
+  sha256              String?
+  caption             String?
+  storagePath         String
+  sizeBytes           Int?
+  status              String          @default("PENDING")
+  attempts            Int             @default(0)
+  processingToken     String?
+  processingExpiresAt DateTime?
+  failureCode         String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  message             WhatsAppMessage @relation(fields: [messageId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([messageId, metaMediaId])
+  @@index([workspaceId, messageId])
 }
 
 model Conversation {

@@ -3,10 +3,11 @@ export function maskWhatsAppParticipant(value: string) {
   return digits.length > 4 ? `+${digits.slice(0, 2)}••••${digits.slice(-4)}` : "WhatsApp";
 }
 
-export function conversationPreview(message: { type: string; textBody: string | null } | null) {
+export function conversationPreview(message: { type: string; textBody: string | null; attachments?: { caption: string | null }[] } | null) {
   if (!message) return "Sin mensajes";
   if (message.type === "TEXT") return message.textBody?.slice(0, 80) || "Mensaje de texto";
   if (message.type === "TEMPLATE") return "Mensaje de plantilla";
+  if (message.type === "IMAGE") return message.attachments?.[0]?.caption ? `Imagen · ${message.attachments[0].caption.slice(0, 80)}` : "Imagen";
   return "Mensaje no compatible";
 }
 

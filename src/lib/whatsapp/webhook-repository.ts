@@ -1,4 +1,6 @@
 import { Prisma, RecipientStatus } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { attachmentStoragePath } from "@/lib/whatsapp/image-media";
 
 import { prisma } from "@/lib/prisma";
 import { attachWhatsAppMessageToConversation, findWhatsAppClientId } from "@/lib/conversation-core";
@@ -76,7 +78,7 @@ async function processIncomingMessage(
       phoneNumberId: event.phoneNumberId!,
       waId: event.from,
       direction: WHATSAPP_MESSAGE_DIRECTION.INBOUND,
-      type: event.messageType === "TEXT" ? WHATSAPP_MESSAGE_TYPE.TEXT : WHATSAPP_MESSAGE_TYPE.UNSUPPORTED,
+      type: event.messageType,
       status: WHATSAPP_MESSAGE_STATUS.SENT,
       textBody: event.textBody,
       profileName: event.profileName,
@@ -86,8 +88,9 @@ async function processIncomingMessage(
   });
   const message = await transaction.whatsAppMessage.findUniqueOrThrow({
     where: { providerMessageId: event.providerMessageId },
-    select: { id: true },
+    select: { id: true, workspaceId: true, connectionId: true, conversationId: true },
   });
+  if (message.workspaceId !== connection.workspaceId || message.connectionId !== connection.id) return false;
   await attachWhatsAppMessageToConversation(transaction, {
     messageId: message.id,
     workspaceId: connection.workspaceId,
@@ -98,6 +101,17 @@ async function processIncomingMessage(
     profileName: event.profileName,
     clientId,
   });
+  if (event.messageType === "IMAGE" && event.image) {
+    const attached = await transaction.whatsAppMessage.findUniqueOrThrow({ where: { id: message.id }, select: { conversationId: true } });
+    if (!attached.conversationId) throw new Error("Image conversation missing");
+    const id = randomUUID();
+    await transaction.whatsAppMessageAttachment.createMany({ data: [{
+      id, workspaceId: connection.workspaceId, messageId: message.id, kind: "IMAGE",
+      metaMediaId: event.image.mediaId, mimeType: event.image.mimeType, sha256: event.image.sha256,
+      caption: event.image.caption,
+      storagePath: attachmentStoragePath(connection.workspaceId, attached.conversationId, message.id, id),
+    }], skipDuplicates: true });
+  }
   return created.count === 1;
 }
 

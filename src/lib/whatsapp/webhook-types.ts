@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isWhatsAppImageMime } from "@/lib/whatsapp/image-media";
 
 export const WHATSAPP_MESSAGE_DIRECTION = {
   INBOUND: "INBOUND",
@@ -8,6 +9,7 @@ export const WHATSAPP_MESSAGE_DIRECTION = {
 export const WHATSAPP_MESSAGE_TYPE = {
   TEXT: "TEXT",
   TEMPLATE: "TEMPLATE",
+  IMAGE: "IMAGE",
   UNSUPPORTED: "UNSUPPORTED",
 } as const;
 
@@ -45,7 +47,8 @@ export type WhatsAppIncomingMessageEvent = EventBase & {
   kind: "message";
   providerMessageId: string;
   from: string;
-  messageType: "TEXT" | "UNSUPPORTED";
+  messageType: "TEXT" | "IMAGE" | "UNSUPPORTED";
+  image: { mediaId: string; mimeType: string; sha256: string | null; caption: string | null } | null;
   textBody: string | null;
   profileName: string | null;
   occurredAt: Date | null;
@@ -209,7 +212,12 @@ export function parseWhatsAppWebhookPayload(payload: unknown): ParsedWhatsAppEve
         if (!message || !providerMessageId || !from) continue;
         recognizedItems += 1;
         const rawType = asString(message.type)?.toLowerCase();
-        const messageType = rawType === "text" ? "TEXT" : "UNSUPPORTED";
+        const rawImage = rawType === "image" ? asRecord(message.image) : null;
+        const mediaId = asString(rawImage?.id);
+        const mimeType = asString(rawImage?.mime_type)?.toLowerCase();
+        const image = mediaId && /^\d{1,100}$/.test(mediaId) && mimeType && isWhatsAppImageMime(mimeType)
+          ? { mediaId, mimeType, sha256: safeText(rawImage?.sha256, 100), caption: safeText(rawImage?.caption, 2000) } : null;
+        const messageType = rawType === "text" ? "TEXT" : image ? "IMAGE" : "UNSUPPORTED";
         const textBody = messageType === "TEXT"
           ? safeText(asRecord(message.text)?.body, 32_000)
           : null;
@@ -224,6 +232,7 @@ export function parseWhatsAppWebhookPayload(payload: unknown): ParsedWhatsAppEve
           providerMessageId,
           from,
           messageType,
+          image,
           textBody,
           profileName,
           occurredAt: parseWhatsAppTimestamp(timestamp),
@@ -232,6 +241,7 @@ export function parseWhatsAppWebhookPayload(payload: unknown): ParsedWhatsAppEve
             from,
             timestamp,
             messageType,
+            ...(image ? { image } : {}),
             textBody,
             profileName,
             phoneNumberId,

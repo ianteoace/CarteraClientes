@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isWhatsAppImageMime, MAX_WHATSAPP_IMAGE_BYTES, verifyWhatsAppImage, WhatsAppMediaError } from "@/lib/whatsapp/image-media";
+
 import { getWhatsAppConfiguration, type WhatsAppConfiguration } from "@/lib/whatsapp/config";
 import {
   formatPhoneForWhatsApp,
@@ -111,6 +113,51 @@ export class WhatsAppCloudApiClient {
     private readonly configuration: WhatsAppConfiguration = getWhatsAppConfiguration(),
     private readonly fetcher: typeof fetch = fetch,
   ) {}
+
+  async retrieveImage(mediaId: string, phoneNumberId: string, expected: { mimeType: string; sha256?: string | null }) {
+    if (!/^\d{1,100}$/.test(mediaId) || !/^\d+$/.test(phoneNumberId) || !isWhatsAppImageMime(expected.mimeType)) {
+      throw new WhatsAppMediaError("INVALID_MEDIA");
+    }
+    const signal = AbortSignal.timeout(25_000);
+    let metadataResponse: Response;
+    try {
+      metadataResponse = await this.fetcher(`https://graph.facebook.com/${encodeURIComponent(this.configuration.apiVersion)}/${mediaId}?phone_number_id=${encodeURIComponent(phoneNumberId)}`, {
+        headers: { Authorization: `Bearer ${this.configuration.accessToken}` }, cache: "no-store", redirect: "error", signal,
+      });
+    } catch { throw new WhatsAppMediaError("RETRIEVE_FAILED", true); }
+    if (!metadataResponse.ok) throw new WhatsAppMediaError("RETRIEVE_FAILED", true);
+    const metadata = await metadataResponse.json().catch(() => null) as { id?: string; url?: string; mime_type?: string; file_size?: number; sha256?: string } | null;
+    if (!metadata || metadata.id !== mediaId || metadata.mime_type !== expected.mimeType || typeof metadata.url !== "string" ||
+      !Number.isSafeInteger(metadata.file_size) || metadata.file_size! <= 0 || metadata.file_size! > MAX_WHATSAPP_IMAGE_BYTES) throw new WhatsAppMediaError("INVALID_MEDIA");
+    let url: URL;
+    try { url = new URL(metadata.url); } catch { throw new WhatsAppMediaError("INVALID_MEDIA_URL"); }
+    if (url.protocol !== "https:" || url.username || url.password || url.port ||
+      !(url.hostname === "lookaside.fbsbx.com" || url.hostname.endsWith(".fbcdn.net"))) throw new WhatsAppMediaError("INVALID_MEDIA_URL");
+    let download: Response;
+    try {
+      download = await this.fetcher(url.toString(), { headers: { Authorization: `Bearer ${this.configuration.accessToken}` }, cache: "no-store", redirect: "error", signal });
+    } catch { throw new WhatsAppMediaError("DOWNLOAD_FAILED", true); }
+    if (!download.ok || !download.body) throw new WhatsAppMediaError("DOWNLOAD_FAILED", true);
+    if (download.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== expected.mimeType) throw new WhatsAppMediaError("INVALID_MIME");
+    const contentLength = Number(download.headers.get("content-length"));
+    if (contentLength > MAX_WHATSAPP_IMAGE_BYTES) throw new WhatsAppMediaError("INVALID_SIZE");
+    const reader = download.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_WHATSAPP_IMAGE_BYTES) { await reader.cancel(); throw new WhatsAppMediaError("INVALID_SIZE"); }
+        chunks.push(value);
+      }
+    } catch (error) { if (error instanceof WhatsAppMediaError) throw error; throw new WhatsAppMediaError("DOWNLOAD_FAILED", true); }
+    if (size !== metadata.file_size) throw new WhatsAppMediaError("INVALID_SIZE");
+    const bytes = Buffer.concat(chunks, size);
+    const sha256 = verifyWhatsAppImage(bytes, expected.mimeType, [expected.sha256, metadata.sha256]);
+    return { bytes, mimeType: expected.mimeType, sizeBytes: size, sha256 };
+  }
 
   private async sendMessage(
     to: string,

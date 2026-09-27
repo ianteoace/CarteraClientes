@@ -11,6 +11,7 @@ import { getConversationScopeFilter, requireInboxAccess } from "@/lib/conversati
 import { prisma } from "@/lib/prisma";
 import { requireModule } from "@/lib/workspace-module-service";
 import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
+import { attachmentPreviewSelect } from "@/lib/whatsapp/attachment-types";
 
 export class CaseConversationValidationError extends Error {}
 
@@ -52,8 +53,8 @@ export async function getConversationCaseCreationContext(
   if (!contact) return null;
   const sourceMessageIds = getSourceMessageIds(origin);
   const sourceMessages = sourceMessageIds.length ? await prisma.whatsAppMessage.findMany({
-    where: { id: { in: sourceMessageIds }, conversationId: conversation.id, workspaceId: context.workspaceId, direction: "INBOUND", type: "TEXT" },
-    select: { id: true, textBody: true, createdAt: true },
+    where: { id: { in: sourceMessageIds }, conversationId: conversation.id, workspaceId: context.workspaceId, direction: "INBOUND", type: { in: ["TEXT", "IMAGE"] } },
+    select: { id: true, type: true, textBody: true, createdAt: true, attachments: { select: { caption: true }, take: 1 } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   }) : [];
   if (sourceMessages.length !== sourceMessageIds.length) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación.");
@@ -89,7 +90,7 @@ export async function linkCaseToConversation(
   const sourceMessageIds = getSourceMessageIds(origin);
   if (sourceMessageIds.length) {
     const source = await transaction.whatsAppMessage.count({
-      where: { id: { in: sourceMessageIds }, workspaceId: context.workspaceId, conversationId: conversation.id, direction: "INBOUND", type: "TEXT" },
+      where: { id: { in: sourceMessageIds }, workspaceId: context.workspaceId, conversationId: conversation.id, direction: "INBOUND", type: { in: ["TEXT", "IMAGE"] } },
     });
     if (source !== sourceMessageIds.length) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación.");
   }
@@ -152,7 +153,7 @@ export async function listCaseConversations(context: AuthorizationContext, caseI
     select: {
       id: true, createdAt: true, conversation: { select: { id: true, client: { select: { name: true } }, externalDisplayName: true } },
       sourceMessages: {
-        select: { messageId: true, message: { select: { textBody: true, direction: true, type: true, createdAt: true, sentAt: true } } },
+        select: { messageId: true, message: { select: { textBody: true, direction: true, type: true, createdAt: true, sentAt: true, attachments: { select: attachmentPreviewSelect, orderBy: { createdAt: "asc" } } } } },
         orderBy: [{ message: { createdAt: "asc" } }, { messageId: "asc" }],
       },
     },

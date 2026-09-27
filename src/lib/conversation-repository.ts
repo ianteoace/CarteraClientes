@@ -8,6 +8,7 @@ import { getClientScopeFilter, hasAllGroups, requirePermission, type Authorizati
 import { prisma } from "@/lib/prisma";
 import { requireModule } from "@/lib/workspace-module-service";
 import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
+import { attachmentPreviewSelect } from "@/lib/whatsapp/attachment-types";
 
 export class ConversationNotFoundError extends Error {}
 
@@ -84,7 +85,7 @@ export async function listConversations(
     select: {
       id: true, channel: true, status: true, externalParticipantId: true, externalDisplayName: true,
       lastMessageAt: true, client: { select: { id: true, name: true, company: true } },
-      messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, select: { type: true, textBody: true } },
+      messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, select: { type: true, textBody: true, attachments: { take: 1, select: { caption: true } } } },
     },
   });
   const rowById = new Map(rows.map((row) => [row.id, row]));
@@ -122,6 +123,7 @@ export async function getConversationDetails(context: AuthorizationContext, id: 
     take: 101,
     select: { id: true, direction: true, type: true, status: true, textBody: true, createdAt: true, sentAt: true,
       sentByMemberId: true, sentByUserId: true,
+      attachments: { select: attachmentPreviewSelect, orderBy: { createdAt: "asc" } },
     },
   });
   const page = messages.slice(0, 100);
@@ -238,7 +240,7 @@ export async function getRecentConversationsForContact(context: AuthorizationCon
     where: { clientId, ...getConversationScopeFilter(context) },
     orderBy: { lastMessageAt: "desc" }, take: 5,
     select: { id: true, channel: true, lastMessageAt: true,
-      messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, select: { type: true, textBody: true } },
+      messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, select: { type: true, textBody: true, attachments: { take: 1, select: { caption: true } } } },
     },
   });
 }

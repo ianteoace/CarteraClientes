@@ -9,6 +9,7 @@ import { getAuthorizationContext, hasPermission } from "@/lib/authorization";
 import { getTicketFormOptions } from "@/lib/ticket-service";
 import { CaseConversationValidationError, getConversationCaseCreationContext } from "@/lib/case-conversation-repository";
 import { CASE_TYPE } from "@/lib/case-types";
+import { buildCaseSourceDescription } from "@/lib/case-source-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,6 @@ export default async function NewTicketPage({ searchParams }: { searchParams: Pr
   }
   const requestedContactId = typeof query.contactId === "string" ? query.contactId : undefined;
   const initialContactId = origin ? origin.conversation.clientId ?? undefined : options.contacts.some(({ id }) => id === requestedContactId) ? requestedContactId : undefined;
-  const description = origin?.sourceMessages.map((message) => message.textBody?.trim()).filter(Boolean).join("\n\n");
+  const description = origin ? buildCaseSourceDescription(origin.sourceMessages) : undefined;
   return <main className="app-page"><Link className="text-sm font-semibold text-muted hover:text-foreground" href={origin ? `/bandeja/${origin.conversation.id}` : "/tickets"}>← {origin ? "Volver a la conversación" : "Volver a Tickets"}</Link><p className="eyebrow mt-7">Registro manual</p><h1 className="page-heading">Nuevo ticket</h1><p className="page-description">Registrá una problemática o solicitud de un contacto visible en tu alcance.</p>{description && description.length > 10000 ? <p className="mt-5 text-sm text-danger">Los mensajes seleccionados superan el límite de la descripción. Seleccioná menos mensajes.</p> : options.contacts.length ? <TicketForm contacts={options.contacts} members={options.members} initialContactId={initialContactId} origin={origin ? { conversationId: origin.conversation.id, sourceMessageIds: origin.sourceMessages.map((message) => message.id), description } : undefined} /> : <p className="empty-state mt-7">No hay contactos visibles para crear un ticket.</p>}</main>;
 }
