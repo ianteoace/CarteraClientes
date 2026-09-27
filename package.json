@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:whatsapp-webhooks": "node --env-file=.env --env-file-if-exists=.env.local scripts/run-whatsapp-webhook-tests.mjs",
     "test:inbox-reply": "node --env-file=.env --env-file-if-exists=.env.local scripts/run-inbox-reply-tests.mjs",
+    "test:case-conversation": "node --env-file=.env --env-file-if-exists=.env.local scripts/run-case-conversation-tests.mjs",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

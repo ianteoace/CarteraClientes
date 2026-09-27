@@ -5,6 +5,7 @@ import { Prisma, WorkspacePermission } from "@prisma/client";
 import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
 import { activityActor, recordActivity } from "@/lib/activity-service";
 import { getClientScopeFilter, hasPermission, requirePermission, type AuthorizationContext } from "@/lib/authorization";
+import { linkCaseToConversation, type CaseConversationOrigin } from "@/lib/case-conversation-repository";
 import { changeCaseStatusInTransaction, createCaseInTransaction, updateCaseCoreInTransaction } from "@/lib/case-service";
 import { CASE_TYPE, ORDER_STATUS, canTransitionOrderStatus, isOrderStatus } from "@/lib/case-types";
 import {
@@ -44,6 +45,7 @@ export type CreateOrderInput = {
   currency?: string;
   fulfillmentType?: string;
   fulfillmentNotes?: string | null;
+  origin?: CaseConversationOrigin;
 };
 
 function decimal(value: string | number | Prisma.Decimal, label: string, scale: number) {
@@ -137,6 +139,7 @@ export async function createOrder(context: AuthorizationContext, input: CreateOr
     } });
     if (normalizedItems.length) await transaction.orderItem.createMany({ data: normalizedItems.map((item) => ({ ...item, orderCaseId: created.id })) });
     await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.ORDER_ITEMS_UPDATED, metadata: { type: CASE_TYPE.ORDER, number: created.number, itemCount: normalizedItems.length, total: calculated.total.toFixed(2), currency } }, transaction);
+    if (input.origin) await linkCaseToConversation(context, created, input.origin, transaction);
     return findOrderById(context, created.id, transaction);
   }, { maxWait: 20_000, timeout: 30_000 });
 }

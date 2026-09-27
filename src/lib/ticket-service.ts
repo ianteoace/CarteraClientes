@@ -5,6 +5,7 @@ import { GroupScopeMode, Prisma, WorkspacePermission, WorkspaceRole } from "@pri
 import { ACTIVITY_ACTION, ACTIVITY_ENTITY } from "@/lib/activity-types";
 import { activityActor, maskActivityEmail, recordActivity } from "@/lib/activity-service";
 import { getClientScopeFilter, hasPermission, requirePermission, type AuthorizationContext } from "@/lib/authorization";
+import { linkCaseToConversation, type CaseConversationOrigin } from "@/lib/case-conversation-repository";
 import {
   changeCaseStatusInTransaction,
   createCaseInTransaction,
@@ -129,6 +130,7 @@ export type CreateTicketInput = {
   priority?: string | null;
   assignedMemberId?: string | null;
   participantIds?: string[];
+  origin?: CaseConversationOrigin;
 };
 
 export async function createTicket(context: AuthorizationContext, input: CreateTicketInput) {
@@ -149,7 +151,7 @@ export async function createTicket(context: AuthorizationContext, input: CreateT
     }, transaction);
     const candidates = await validateEligibleMemberIds(transaction, context, contactId, requestedMemberIds);
     await transaction.ticketDetails.create({
-      data: { caseId: created.id, assignedMemberId, source: TICKET_SOURCE.MANUAL },
+      data: { caseId: created.id, assignedMemberId, source: input.origin ? TICKET_SOURCE.WHATSAPP : TICKET_SOURCE.MANUAL },
     });
     if (requestedMemberIds.length) {
       await transaction.ticketParticipant.createMany({
@@ -170,6 +172,7 @@ export async function createTicket(context: AuthorizationContext, input: CreateT
     if (additionalParticipants.length) {
       await recordActivity({ ...activityActor(context), entityType: ACTIVITY_ENTITY.CASE, entityId: created.id, action: ACTIVITY_ACTION.TICKET_PARTICIPANTS_ADDED, metadata: { type: CASE_TYPE.TICKET, number: created.number, count: additionalParticipants.length } }, transaction);
     }
+    if (input.origin) await linkCaseToConversation(context, created, input.origin, transaction);
     return findTicketById(context, created.id, transaction);
   }, { maxWait: 20_000, timeout: 30_000 });
 }

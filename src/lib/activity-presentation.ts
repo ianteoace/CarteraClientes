@@ -97,6 +97,7 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.ORDER_PAYMENT_STATUS_CHANGED: return `cambió el pago del Pedido #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.ORDER_FULFILLMENT_UPDATED: return `actualizó la entrega del Pedido #${metadata.number ?? "-"}`;
     case ACTIVITY_ACTION.CONVERSATION_CONTACT_LINKED: return `vinculó una conversación con ${name}`;
+    case ACTIVITY_ACTION.CONVERSATION_CASE_LINKED: return `vinculó la conversación con ${metadata.caseType === "ORDER" ? "el Pedido" : "el Ticket"} #${metadata.caseNumber ?? "-"}`;
     case ACTIVITY_ACTION.CONVERSATION_ARCHIVED: return "archivó una conversación";
     case ACTIVITY_ACTION.CONVERSATION_REOPENED: return "reabrió una conversación";
     default: return "realizó una acción en la cartera";

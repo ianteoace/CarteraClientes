@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { AuthenticationRequiredError } from "@/lib/auth/server";
 import { AuthorizationError, getAuthorizationContext } from "@/lib/authorization";
 import { CaseValidationError } from "@/lib/case-service";
+import { CaseConversationValidationError } from "@/lib/case-conversation-repository";
 import {
   OrderValidationError,
   changeOrderStatus,
@@ -20,7 +21,7 @@ import { WorkspaceModuleError } from "@/lib/workspace-module-service";
 export type OrderActionResult = { success: true; number?: number; message?: string } | { success: false; error: string };
 
 function errorResult(error: unknown): OrderActionResult {
-  if (error instanceof OrderValidationError || error instanceof CaseValidationError || error instanceof AuthorizationError || error instanceof AuthenticationRequiredError || error instanceof WorkspaceModuleError) return { success: false, error: error.message };
+  if (error instanceof OrderValidationError || error instanceof CaseValidationError || error instanceof CaseConversationValidationError || error instanceof AuthorizationError || error instanceof AuthenticationRequiredError || error instanceof WorkspaceModuleError) return { success: false, error: error.message };
   return { success: false, error: "No se pudo completar la acción. Intentá nuevamente." };
 }
 function parseItems(value: FormDataEntryValue | null): OrderItemInput[] {
@@ -54,9 +55,14 @@ export async function createOrderAction(formData: FormData): Promise<OrderAction
       fulfillmentType: String(formData.get("fulfillmentType") ?? "PICKUP"),
       fulfillmentNotes: String(formData.get("fulfillmentNotes") ?? ""),
       currency: "ARS",
+      origin: formData.has("conversationId") ? {
+        conversationId: String(formData.get("conversationId") ?? ""),
+        sourceMessageId: String(formData.get("sourceMessageId") ?? "") || null,
+      } : undefined,
     });
     if (!order) return { success: false, error: "No se pudo crear el pedido." };
     refresh(order.number);
+    if (formData.has("conversationId")) revalidatePath(`/bandeja/${String(formData.get("conversationId"))}`);
     return { success: true, number: order.number };
   } catch (error) { return errorResult(error); }
 }

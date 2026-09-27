@@ -50,6 +50,7 @@ model Workspace {
   whatsappMessages      WhatsAppMessage[]
   whatsappWebhookEvents WhatsAppWebhookEvent[]
   conversations         Conversation[]
+  caseConversations     CaseConversation[]
 }
 
 model WorkspaceModule {
@@ -145,6 +146,7 @@ model WorkspaceMember {
   scheduledCampaigns        Campaign[]            @relation("CampaignScheduler")
   conversationReadStates    ConversationReadState[]
   sentWhatsAppMessages      WhatsAppMessage[]     @relation("InboxMessageSender")
+  createdCaseConversations  CaseConversation[]    @relation("CaseConversationCreator")
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -184,8 +186,10 @@ model Case {
   ticketIncidentLinks  IncidentTicket[]      @relation("TicketCaseLinks")
   orderDetails         OrderDetails?
   orderItems           OrderItem[]
+  conversations        CaseConversation[]
 
   @@unique([workspaceId, number])
+  @@unique([id, workspaceId])
   @@index([workspaceId, type, createdAt])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, contactId, createdAt])
@@ -546,6 +550,7 @@ model WhatsAppMessage {
   client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
   conversation      Conversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   sentByMember      WorkspaceMember?    @relation("InboxMessageSender", fields: [sentByMemberId], references: [id], onDelete: SetNull)
+  sourceCaseConversations CaseConversation[]
 
   @@unique([workspaceId, clientRequestId])
   @@index([workspaceId, createdAt])
@@ -575,10 +580,33 @@ model Conversation {
   whatsappConnection    WhatsAppConnection?     @relation(fields: [whatsappConnectionId], references: [id], onDelete: SetNull)
   messages              WhatsAppMessage[]
   readStates            ConversationReadState[]
+  cases                 CaseConversation[]
 
   @@unique([workspaceId, whatsappConnectionId, externalParticipantId])
+  @@unique([id, workspaceId])
   @@index([workspaceId, lastMessageAt, id])
   @@index([workspaceId, clientId])
+}
+
+model CaseConversation {
+  id                String           @id @default(cuid())
+  workspaceId       String
+  caseId            String
+  conversationId    String
+  sourceMessageId   String?
+  createdByMemberId String?
+  createdByUserId   String?
+  createdAt         DateTime         @default(now())
+  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  case              Case             @relation(fields: [caseId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  conversation      Conversation     @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  sourceMessage     WhatsAppMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  createdByMember   WorkspaceMember? @relation("CaseConversationCreator", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([caseId, conversationId])
+  @@index([workspaceId, conversationId, createdAt])
+  @@index([workspaceId, caseId])
+  @@index([sourceMessageId])
 }
 
 model ConversationReadState {

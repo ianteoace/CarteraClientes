@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { AuthenticationRequiredError } from "@/lib/auth/server";
 import { AuthorizationError, getAuthorizationContext } from "@/lib/authorization";
 import { CaseValidationError } from "@/lib/case-service";
+import { CaseConversationValidationError } from "@/lib/case-conversation-repository";
 import { requireModule, WorkspaceModuleError } from "@/lib/workspace-module-service";
 import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 import {
@@ -28,6 +29,7 @@ function ticketActionError(error: unknown): TicketActionResult {
   if (
     error instanceof TicketValidationError
     || error instanceof CaseValidationError
+    || error instanceof CaseConversationValidationError
     || error instanceof AuthorizationError
     || error instanceof AuthenticationRequiredError
     || error instanceof WorkspaceModuleError
@@ -56,9 +58,14 @@ export async function createTicketAction(formData: FormData): Promise<TicketActi
       priority: String(formData.get("priority") ?? "NORMAL"),
       assignedMemberId: String(formData.get("assignedMemberId") ?? ""),
       participantIds: formData.getAll("participantIds").map(String),
+      origin: formData.has("conversationId") ? {
+        conversationId: String(formData.get("conversationId") ?? ""),
+        sourceMessageId: String(formData.get("sourceMessageId") ?? "") || null,
+      } : undefined,
     });
     if (!ticket) return { success: false, error: "No se pudo crear el ticket." };
     refreshTicket(ticket.number);
+    if (formData.has("conversationId")) revalidatePath(`/bandeja/${String(formData.get("conversationId"))}`);
     return { success: true, number: ticket.number };
   } catch (error) {
     return ticketActionError(error);

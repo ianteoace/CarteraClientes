@@ -3,8 +3,9 @@ import "server-only";
 import { Prisma, WorkspacePermission } from "@prisma/client";
 
 import { ACTIVITY_ENTITY, ACTIVITY_FILTERS, type ActivityFilter } from "@/lib/activity-types";
-import { getAccessibleGroupIds, getClientScopeFilter, hasAllGroups, requirePermission, type AuthorizationContext } from "@/lib/authorization";
+import { getAccessibleGroupIds, getClientScopeFilter, hasAllGroups, hasPermission, requirePermission, type AuthorizationContext } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 
 const PAGE_SIZE = 30;
 
@@ -25,24 +26,34 @@ export async function listWorkspaceActivity(context: AuthorizationContext, filte
       { metadata: { path: ["type"], equals: caseSubtype } },
     ] }] } : {}),
   };
+  const canViewConversations = hasPermission(context, WorkspacePermission.INBOX_VIEW)
+    && await prisma.workspaceModule.count({ where: { workspaceId: context.workspaceId, key: WORKSPACE_MODULE.INBOX, enabled: true } }) === 1;
+  if (!canViewConversations) {
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { entityType: { not: ACTIVITY_ENTITY.CONVERSATION } }];
+  }
 
   if (!hasAllGroups(context)) {
-    const [groupIds, clients, cases] = await Promise.all([
+    const [groupIds, clients, cases, conversations] = await Promise.all([
       getAccessibleGroupIds(context),
       prisma.client.findMany({ where: getClientScopeFilter(context), select: { id: true } }),
       prisma.case.findMany({
         where: { workspaceId: context.workspaceId, contact: { is: getClientScopeFilter(context) } },
         select: { id: true },
       }),
+      canViewConversations ? prisma.conversation.findMany({
+        where: { workspaceId: context.workspaceId, client: { is: getClientScopeFilter(context) } }, select: { id: true },
+      }) : Promise.resolve([]),
     ]);
     const clientIds = clients.map(({ id }) => id);
     const caseIds = cases.map(({ id }) => id);
+    const conversationIds = conversations.map(({ id }) => id);
     const privacyFilter: Prisma.ActivityWhereInput = {
       OR: [
-        { entityType: { notIn: [ACTIVITY_ENTITY.CONTACT, ACTIVITY_ENTITY.GROUP, ACTIVITY_ENTITY.CASE] } },
+        { entityType: { notIn: [ACTIVITY_ENTITY.CONTACT, ACTIVITY_ENTITY.GROUP, ACTIVITY_ENTITY.CASE, ACTIVITY_ENTITY.CONVERSATION] } },
         { entityType: ACTIVITY_ENTITY.CONTACT, entityId: { in: clientIds } },
         { entityType: ACTIVITY_ENTITY.GROUP, entityId: { in: groupIds } },
         { entityType: ACTIVITY_ENTITY.CASE, entityId: { in: caseIds } },
+        { entityType: ACTIVITY_ENTITY.CONVERSATION, entityId: { in: conversationIds } },
       ],
     };
     where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), privacyFilter];

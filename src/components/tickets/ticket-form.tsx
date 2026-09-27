@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createTicketAction } from "@/app/tickets/actions";
@@ -10,16 +10,18 @@ import { TICKET_PRIORITY_LABELS } from "@/lib/ticket-labels";
 type ContactOption = { id: string; name: string; phone: string; email: string | null };
 type MemberOption = { id: string; label: string; eligibleContactIds: string[] };
 
-export function TicketForm({ contacts, members, initialContactId }: {
+export function TicketForm({ contacts, members, initialContactId, origin }: {
   contacts: ContactOption[];
   members: MemberOption[];
   initialContactId?: string;
+  origin?: { conversationId: string; sourceMessageId?: string; description?: string };
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [contactId, setContactId] = useState(initialContactId ?? "");
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
+  const submittingRef = useRef(false);
   const visibleContacts = useMemo(() => {
     const value = query.trim().toLocaleLowerCase();
     return value ? contacts.filter((contact) => [contact.name, contact.phone, contact.email ?? ""].some((field) => field.toLocaleLowerCase().includes(value))) : contacts;
@@ -28,21 +30,32 @@ export function TicketForm({ contacts, members, initialContactId }: {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setPending(true);
     setError(undefined);
-    const result = await createTicketAction(new FormData(event.currentTarget));
-    setPending(false);
-    if (!result.success) return setError(result.error);
-    router.push(`/tickets/${result.number}`);
-    router.refresh();
+    try {
+      const result = await createTicketAction(new FormData(event.currentTarget));
+      if (!result.success) return setError(result.error);
+      router.push(`/tickets/${result.number}`);
+      router.refresh();
+    } catch {
+      setError("No se pudo crear el ticket. Intentá nuevamente.");
+    } finally {
+      submittingRef.current = false;
+      setPending(false);
+    }
   }
 
   return <form className="mt-7 max-w-3xl space-y-7" onSubmit={submit}>
+    {origin ? <><input type="hidden" name="conversationId" value={origin.conversationId} /><input type="hidden" name="sourceMessageId" value={origin.sourceMessageId ?? ""} /><input type="hidden" name="contactId" value={initialContactId ?? ""} /></> : null}
     <section className="border-y border-border py-5">
-      <label className="field-label" htmlFor="ticket-contact-search">Buscar contacto</label>
+      {origin ? <p className="mb-3 text-sm text-muted">Se vinculará con la conversación de WhatsApp. El contacto está fijado para esta operación.</p> : null}
+      {!origin ? <><label className="field-label" htmlFor="ticket-contact-search">Buscar contacto</label>
       <input id="ticket-contact-search" className="field mt-1" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, teléfono o email" />
+      </> : null}
       <label className="field-label mt-4" htmlFor="ticket-contact">Contacto *</label>
-      <select id="ticket-contact" className="field mt-1" name="contactId" required value={contactId} onChange={(event) => setContactId(event.target.value)}>
+      <select id="ticket-contact" className="field mt-1" name={origin ? undefined : "contactId"} disabled={Boolean(origin)} required value={contactId} onChange={(event) => setContactId(event.target.value)}>
         <option value="">Seleccioná un contacto</option>
         {visibleContacts.map((contact) => <option value={contact.id} key={contact.id}>{contact.name} · {contact.phone}</option>)}
       </select>
@@ -51,7 +64,7 @@ export function TicketForm({ contacts, members, initialContactId }: {
 
     <div className="grid gap-5 sm:grid-cols-2">
       <label className="field-label sm:col-span-2">Título *<input className="field mt-1" name="title" required maxLength={200} /></label>
-      <label className="field-label sm:col-span-2">Descripción<textarea className="field mt-1 min-h-32" name="description" maxLength={10000} /></label>
+      <label className="field-label sm:col-span-2">Descripción<textarea className="field mt-1 min-h-32" name="description" maxLength={10000} defaultValue={origin?.description ?? ""} /></label>
       <label className="field-label">Prioridad<select className="field mt-1" name="priority" defaultValue={CASE_PRIORITY.NORMAL}>{Object.values(CASE_PRIORITY).map((priority) => <option value={priority} key={priority}>{TICKET_PRIORITY_LABELS[priority]}</option>)}</select></label>
       <label className="field-label">Responsable<select className="field mt-1" name="assignedMemberId" disabled={!contactId}><option value="">Sin responsable</option>{eligibleMembers.map((member) => <option value={member.id} key={member.id}>{member.label}</option>)}</select></label>
     </div>
