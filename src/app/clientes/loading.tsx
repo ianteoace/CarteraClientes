@@ -1,0 +1,3 @@
+export default function ClientsLoading() {
+  return <main aria-label="Cargando Contactos" className="app-page app-page-wide space-y-5"><div className="space-y-3 border-b border-border pb-5"><div className="skeleton-line h-3 w-24" /><div className="skeleton-line h-8 w-52" /><div className="skeleton-line h-3 w-72 max-w-full" /></div><div className="skeleton-line h-10 w-full" /><div className="border-y border-border">{Array.from({ length: 6 }, (_, index) => <div className="flex gap-5 border-b border-border px-3 py-4" key={index}><div className="skeleton-line h-4 w-1/3" /><div className="skeleton-line h-4 w-1/4" /><div className="skeleton-line h-4 w-1/5" /></div>)}</div></main>;
+}

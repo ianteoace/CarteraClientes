@@ -1,0 +1,3 @@
+export default function InboxLoading() {
+  return <main aria-label="Cargando Bandeja" className="app-page inbox-page"><div className="inbox-frame"><div className="inbox-list"><div className="inbox-list-header space-y-3"><div className="skeleton-line h-3 w-20" /><div className="skeleton-line h-7 w-36" /><div className="skeleton-line h-10 w-full" /></div>{Array.from({ length: 6 }, (_, index) => <div className="space-y-2 border-b border-border px-5 py-4" key={index}><div className="skeleton-line h-4 w-2/3" /><div className="skeleton-line h-3 w-full" /></div>)}</div><div className="inbox-thread hidden p-6 lg:flex"><div className="skeleton-line h-8 w-48" /></div></div></main>;
+}

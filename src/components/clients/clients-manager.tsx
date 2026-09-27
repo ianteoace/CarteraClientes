@@ -7,6 +7,7 @@ import { addSelectedContactsToGroupAction, createGroupFromSelectedContactsAction
 import { tryNormalizePhone } from "@/lib/phone";
 import type { ClientListItem } from "@/lib/client-repository";
 import type { GroupListItem } from "@/lib/group-repository";
+import { PageHeader } from "@/components/ui/page-header";
 
 import { ClientForm } from "./client-form";
 import { ClientImportDialog } from "./client-import-dialog";
@@ -91,15 +92,8 @@ export function ClientsManager({ clients, groups, permissions }: ClientsManagerP
   }
 
   return (
-    <section className="app-page space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Tu cartera</p>
-          <h1 className="page-heading">Contactos</h1>
-          <p className="page-description">
-            {clients.length} {clients.length === 1 ? "contacto" : "contactos"} · {clients.filter((client) => client.optIn).length} autorizados para campañas
-          </p>
-        </div>
+    <section className="app-page app-page-wide space-y-5">
+      <PageHeader eyebrow="TU CARTERA" title="Contactos" description={`${clients.length} ${clients.length === 1 ? "contacto" : "contactos"} · ${clients.filter((client) => client.optIn).length} autorizados para campañas`} actions={
         <div className="flex flex-wrap gap-2">
           {permissions.create ? <>
           <button
@@ -118,16 +112,16 @@ export function ClientsManager({ clients, groups, permissions }: ClientsManagerP
           </button>
           </> : null}
         </div>
-      </div>
+      } />
 
-      <div className="flex flex-col gap-2 border-y border-border py-3 sm:flex-row"><input
+      <div className="flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-center"><input
         aria-label="Buscar contactos"
         className="field flex-1"
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Buscar por nombre, teléfono, email o empresa"
         type="search"
         value={query}
-      /><select className="rounded-md border border-zinc-300 px-3 py-2 text-sm" aria-label="Autorización" onChange={(event) => setAuthorizationFilter(event.target.value)} value={authorizationFilter}><option value="all">Autorización: Todos</option><option value="authorized">Autorizados</option><option value="unauthorized">Sin autorización</option></select></div>
+      /><select className="field w-full sm:w-48" aria-label="Autorización" onChange={(event) => setAuthorizationFilter(event.target.value)} value={authorizationFilter}><option value="all">Autorización: Todos</option><option value="authorized">Autorizados</option><option value="unauthorized">Sin autorización</option></select><span className="whitespace-nowrap text-xs text-muted">{filteredClients.length} visibles</span></div>
 
       {error ? (
         <p className="notice-error" role="alert">
@@ -135,7 +129,7 @@ export function ClientsManager({ clients, groups, permissions }: ClientsManagerP
         </p>
       ) : null}
 
-      {selectedIds.size > 0 ? <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg"><strong className="mr-2 text-sm">{selectedIds.size} seleccionados</strong>{permissions.edit ? <select className="rounded-md border border-zinc-300 px-2 py-2 text-sm" aria-label="Autorización seleccionada" defaultValue="" onChange={(event) => { if (event.target.value) updateAuthorization(event.target.value === "authorize"); event.currentTarget.value = ""; }}><option value="">Autorización</option><option value="authorize">Autorizar para campañas</option><option value="remove">Quitar autorización</option></select> : null}{permissions.createCampaign ? <button className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white" onClick={prepareMessage} type="button">Preparar mensaje</button> : null}{permissions.manageGroups ? <><select className="rounded-md border border-zinc-300 px-2 py-2 text-sm" onChange={(event) => setGroupId(event.target.value)} value={groupId}><option value="">Elegir grupo</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select><button className="rounded-md border px-3 py-2 text-sm" onClick={() => runBulk(addSelectedContactsToGroupAction)} type="button">Agregar a grupo</button><button className="rounded-md border px-3 py-2 text-sm" onClick={() => runBulk(removeSelectedContactsFromGroupAction)} type="button">Quitar de grupo</button></> : null}{permissions.createGroup && permissions.manageGroups ? <button className="rounded-md border px-3 py-2 text-sm" onClick={createGroupFromSelection} type="button">Crear grupo</button> : null}<button className="px-3 py-2 text-sm" onClick={() => setSelectedIds(new Set())} type="button">Limpiar</button></div> : null}
+      {selectedIds.size > 0 ? <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 border border-border bg-white p-3 shadow-[0_8px_24px_-16px_#000]"><strong className="mr-2 whitespace-nowrap text-sm">{selectedIds.size} seleccionados</strong>{permissions.edit ? <select className="field w-auto min-w-36 flex-1 sm:flex-none" aria-label="Autorización seleccionada" defaultValue="" onChange={(event) => { if (event.target.value) updateAuthorization(event.target.value === "authorize"); event.currentTarget.value = ""; }}><option value="">Autorización</option><option value="authorize">Autorizar para campañas</option><option value="remove">Quitar autorización</option></select> : null}{permissions.createCampaign ? <button className="btn-primary" onClick={prepareMessage} type="button">Preparar mensaje</button> : null}{permissions.manageGroups ? <><select className="field w-auto min-w-36 flex-1 sm:flex-none" aria-label="Grupo para la selección" onChange={(event) => setGroupId(event.target.value)} value={groupId}><option value="">Elegir grupo</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select><button className="btn-secondary" onClick={() => runBulk(addSelectedContactsToGroupAction)} type="button">Agregar</button><button className="btn-secondary" onClick={() => runBulk(removeSelectedContactsFromGroupAction)} type="button">Quitar</button></> : null}{permissions.createGroup && permissions.manageGroups ? <button className="btn-secondary" onClick={createGroupFromSelection} type="button">Crear grupo</button> : null}<button className="btn-quiet" onClick={() => setSelectedIds(new Set())} type="button">Limpiar</button></div> : null}
 
       <ClientsTable
         clients={filteredClients}

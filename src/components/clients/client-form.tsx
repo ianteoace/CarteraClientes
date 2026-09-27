@@ -47,12 +47,12 @@ export function ClientForm({ client, groups, groupRequired, onClose }: ClientFor
   return (
     <div
       aria-modal="true"
-      className="fixed inset-0 z-10 flex items-center justify-center bg-[#10261d]/35 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
       role="dialog"
       aria-labelledby="client-form-title"
     >
       <form
-        className="w-full max-w-md space-y-5 rounded-2xl bg-surface p-6 shadow-[0_20px_60px_-30px_rgba(20,66,50,.5)]"
+        className="max-h-[90dvh] w-full max-w-md space-y-5 overflow-y-auto rounded-md border border-border bg-white p-6 shadow-xl"
         onSubmit={handleSubmit}
       >
         <div className="flex items-center justify-between gap-4">
