@@ -30,3 +30,16 @@ export function formatPhoneForWhatsApp(
   // Cloud API acepta estos móviles argentinos sin el 9 internacional.
   return argentineMobile ? `54${argentineMobile[1]}` : normalizedPhone;
 }
+
+/**
+ * Produce las variantes internas posibles de un wa_id sin modificar el valor
+ * recibido de Meta. Argentina puede conservar el 9 en phoneNormalized aunque
+ * Cloud API entregue el número sin ese dígito internacional.
+ */
+export function getInternalPhoneCandidatesForWhatsApp(whatsAppPhone: string) {
+  const metaPhone = formatPhoneForWhatsApp(whatsAppPhone, "meta-explicit");
+  const candidates = new Set([metaPhone]);
+  const argentineMobile = metaPhone.match(/^54(\d{10})$/);
+  if (argentineMobile) candidates.add(`549${argentineMobile[1]}`);
+  return [...candidates];
+}

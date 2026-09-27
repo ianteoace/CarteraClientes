@@ -23,6 +23,7 @@ model Client {
   clientGroups       ClientGroup[]
   campaignRecipients CampaignRecipient[]
   cases              Case[]
+  whatsappMessages   WhatsAppMessage[]
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, phoneNormalized])
@@ -30,20 +31,23 @@ model Client {
 }
 
 model Workspace {
-  id          String                @id @default(cuid())
-  name        String
-  description String?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  members     WorkspaceMember[]
-  clients     Client[]
-  groups      Group[]
-  campaigns   Campaign[]
-  invitations WorkspaceInvitation[]
-  activities  Activity[]
-  cases       Case[]
-  sequence    WorkspaceSequence?
-  modules     WorkspaceModule[]
+  id                    String                 @id @default(cuid())
+  name                  String
+  description           String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  members               WorkspaceMember[]
+  clients               Client[]
+  groups                Group[]
+  campaigns             Campaign[]
+  invitations           WorkspaceInvitation[]
+  activities            Activity[]
+  cases                 Case[]
+  sequence              WorkspaceSequence?
+  modules               WorkspaceModule[]
+  whatsappConnections   WhatsAppConnection[]
+  whatsappMessages      WhatsAppMessage[]
+  whatsappWebhookEvents WhatsAppWebhookEvent[]
 }
 
 model WorkspaceModule {
@@ -442,23 +446,23 @@ enum RecipientStatus {
 }
 
 model Campaign {
-  id                    String              @id @default(cuid())
-  workspaceId           String
-  name                  String
-  message               String
-  status                CampaignStatus      @default(DRAFT)
-  sourceGroupId         String?
-  scheduledAt           DateTime?
-  scheduledTimezone     String?
-  scheduleGeneration    String?
-  scheduledByMemberId   String?
-  scheduledByUserId     String?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  sourceGroup           Group?              @relation("SourceGroupCampaigns", fields: [sourceGroupId], references: [id], onDelete: SetNull)
-  scheduledByMember     WorkspaceMember?    @relation("CampaignScheduler", fields: [scheduledByMemberId], references: [id], onDelete: SetNull)
-  recipients            CampaignRecipient[]
-  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                  String              @id @default(cuid())
+  workspaceId         String
+  name                String
+  message             String
+  status              CampaignStatus      @default(DRAFT)
+  sourceGroupId       String?
+  scheduledAt         DateTime?
+  scheduledTimezone   String?
+  scheduleGeneration  String?
+  scheduledByMemberId String?
+  scheduledByUserId   String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  sourceGroup         Group?              @relation("SourceGroupCampaigns", fields: [sourceGroupId], references: [id], onDelete: SetNull)
+  scheduledByMember   WorkspaceMember?    @relation("CampaignScheduler", fields: [scheduledByMemberId], references: [id], onDelete: SetNull)
+  recipients          CampaignRecipient[]
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([sourceGroupId])
   @@index([scheduledByMemberId])
@@ -486,4 +490,69 @@ model CampaignRecipient {
   @@unique([campaignId, phoneSnapshot])
   @@index([campaignId, status])
   @@index([clientId])
+}
+
+model WhatsAppConnection {
+  id                 String            @id @default(cuid())
+  workspaceId        String
+  wabaId             String
+  phoneNumberId      String            @unique
+  displayPhoneNumber String?
+  status             String            @default("ACTIVE")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages           WhatsAppMessage[]
+
+  @@index([workspaceId])
+  @@index([wabaId])
+}
+
+model WhatsAppMessage {
+  id                String              @id @default(cuid())
+  workspaceId       String
+  connectionId      String?
+  clientId          String?
+  providerMessageId String              @unique
+  phoneNumberId     String
+  waId              String?
+  direction         String
+  type              String
+  status            String
+  textBody          String?
+  profileName       String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  failureCode       String?
+  failureMessage    String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection        WhatsAppConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([connectionId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([phoneNumberId, createdAt])
+}
+
+model WhatsAppWebhookEvent {
+  id              String     @id @default(cuid())
+  eventKey        String     @unique
+  workspaceId     String?
+  wabaId          String?
+  phoneNumberId   String?
+  eventType       String
+  payload         Json
+  receivedAt      DateTime   @default(now())
+  processedAt     DateTime?
+  processingError String?
+  workspace       Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, receivedAt])
+  @@index([phoneNumberId, receivedAt])
+  @@index([eventType, receivedAt])
 }
