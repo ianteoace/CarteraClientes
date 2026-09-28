@@ -94,5 +94,25 @@ export async function attachWhatsAppMessageToConversation(
     where: { id: message.id, workspaceId: input.workspaceId, connectionId: connection.id },
     data: { conversationId: conversation.id },
   });
+  if (input.direction === "INBOUND") {
+    // Restore campaign context only after the participant actually starts/replies to a thread.
+    await transaction.whatsAppMessage.updateMany({ where: {
+      workspaceId: input.workspaceId, connectionId: connection.id, waId: participantId,
+      campaignRecipientId: { not: null }, direction: "OUTBOUND", conversationId: null,
+    }, data: { conversationId: conversation.id } });
+  }
+  return conversation.id;
+}
+
+/** Campaigns never create an Inbox row, unread state or bump Inbox ordering. */
+export async function attachCampaignMessageToExistingConversation(transaction: Transaction, input: {
+  messageId: string; workspaceId: string; connectionId: string; participantId: string; occurredAt: Date;
+}) {
+  const conversation = await transaction.conversation.findFirst({ where: { workspaceId: input.workspaceId, whatsappConnectionId: input.connectionId, externalParticipantId: input.participantId }, select: { id: true } });
+  if (!conversation) return null;
+  const attached = await transaction.whatsAppMessage.updateMany({ where: { id: input.messageId, workspaceId: input.workspaceId, connectionId: input.connectionId, campaignRecipientId: { not: null }, waId: input.participantId, direction: "OUTBOUND" }, data: { conversationId: conversation.id } });
+  if (attached.count) await transaction.$executeRaw`UPDATE "Conversation" SET
+    "lastOutboundAt" = GREATEST(COALESCE("lastOutboundAt", ${input.occurredAt}), ${input.occurredAt})
+    WHERE id = ${conversation.id} AND "workspaceId" = ${input.workspaceId}`;
   return conversation.id;
 }

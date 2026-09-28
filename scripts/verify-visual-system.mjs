@@ -8,6 +8,7 @@ import { build } from 'esbuild';
 import { fixture, constants } from '../tests/visual-system-fixture.mjs';
 
 const root = process.cwd();
+if (process.argv.includes('--meta-campaigns')) fixture.getCampaignDetails = fixture.getMetaCampaignDetails;
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'billetera-visual-'));
 const pages = ['tickets/page', 'tickets/nuevo/page', 'tickets/[number]/page', 'pedidos/page', 'pedidos/nuevo/page', 'pedidos/[number]/page', 'incidencias/page', 'incidencias/nueva/page', 'incidencias/[number]/page', 'campanas/page', 'campanas/nueva/page', 'campanas/[campaignId]/page', 'equipo/page', 'equipo/[memberId]/page', 'actividad/page', 'configuracion/page'];
 const require = createRequire(import.meta.url);
@@ -49,6 +50,10 @@ try {
     assert.ok(content.includes('<h1'), pages[i] + ': heading');
     assert.ok(!content.includes('min-w-[900px]') && !content.includes('min-w-[760px]'), pages[i] + ': no forced wide table');
     assert.ok(!content.includes('rounded-2xl'), pages[i] + ': no generic cards');
+    if (process.argv.includes('--meta-campaigns') && pages[i] === 'campanas/[campaignId]/page') {
+      assert.ok(content.includes('Enviar por WhatsApp') && content.includes('Entregados') && content.includes('PROMO20'), 'Meta campaign frozen preview and results');
+      assert.ok(!content.includes('wamid.visual.hidden') && !content.includes('visual-template-id'), 'No technical Meta identifiers in campaign UI');
+    }
     const name = pages[i].replaceAll('/', '-').replaceAll('[', '').replaceAll(']', '') + '.html';
     const shell = '<aside class="app-sidebar"><div class="sidebar-brand"><strong class="brand-wordmark">BILLETERA</strong><span class="sidebar-caption">CARTERA DE PRUEBA VISUAL</span></div><nav class="sidebar-nav"><a class="nav-link nav-link-active" href="#">Operación</a><a class="nav-link" href="#">Contactos</a><a class="nav-link" href="#">Bandeja</a></nav></aside><div class="mobile-app-bar"><strong class="brand-wordmark">BILLETERA</strong></div>';
     await writeFile(path.join(temporary, name), '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>' + css + '</style></head><body class="signed-in">' + shell + '<div class="app-content">' + content + '</div></body></html>');

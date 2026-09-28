@@ -40,6 +40,7 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
   const metadata = objectMetadata(rawMetadata);
   const name = text(metadata, "name") ?? "sin nombre";
   const target = text(metadata, "target") ?? "el miembro";
+  const campaignDispatch = text(metadata, "provider") === "meta-whatsapp" ? "el envío por WhatsApp" : "la simulación";
   switch (action) {
     case ACTIVITY_ACTION.CONTACT_CREATED: return `creó el contacto ${name}`;
     case ACTIVITY_ACTION.WORKSPACE_MODULE_ENABLED: return `activó el módulo ${text(metadata, "module") ?? ""}`.trim();
@@ -61,10 +62,10 @@ export function describeActivity(action: string, rawMetadata: Prisma.JsonValue |
     case ACTIVITY_ACTION.CAMPAIGN_RESCHEDULED: return `reprogramó la campaña ${name}`;
     case ACTIVITY_ACTION.CAMPAIGN_SCHEDULE_CANCELLED: return `canceló la programación de ${name}`;
     case ACTIVITY_ACTION.CAMPAIGN_SCHEDULE_TRIGGERED: return `inició automáticamente la campaña ${name}`;
-    case ACTIVITY_ACTION.CAMPAIGN_SEND_STARTED: return `inició la simulación de ${name}`;
-    case ACTIVITY_ACTION.CAMPAIGN_COMPLETED: return `completó la simulación de ${name} para ${count(metadata)} destinatarios`;
-    case ACTIVITY_ACTION.CAMPAIGN_PARTIAL: return `completó parcialmente la simulación de ${name}`;
-    case ACTIVITY_ACTION.CAMPAIGN_FAILED: return `falló la simulación de ${name}`;
+    case ACTIVITY_ACTION.CAMPAIGN_SEND_STARTED: return `inició ${campaignDispatch} de ${name}`;
+    case ACTIVITY_ACTION.CAMPAIGN_COMPLETED: return `completó ${campaignDispatch} de ${name} para ${count(metadata)} destinatarios`;
+    case ACTIVITY_ACTION.CAMPAIGN_PARTIAL: return `completó parcialmente ${campaignDispatch} de ${name}`;
+    case ACTIVITY_ACTION.CAMPAIGN_FAILED: return `falló ${campaignDispatch} de ${name}${text(metadata, "failureCode") === "TEMPLATE_UNAVAILABLE" ? ": plantilla o conexión no disponible" : ""}`;
     case ACTIVITY_ACTION.WORKSPACE_UPDATED: return "actualizó la configuración de la cartera";
     case ACTIVITY_ACTION.MEMBER_ROLE_CHANGED: return `cambió el rol de ${target} de ${ROLE_LABELS[text(metadata, "from") as keyof typeof ROLE_LABELS] ?? text(metadata, "from")} a ${ROLE_LABELS[text(metadata, "to") as keyof typeof ROLE_LABELS] ?? text(metadata, "to")}`;
     case ACTIVITY_ACTION.MEMBER_PERMISSION_CHANGED: return `cambió un permiso de ${target}`;

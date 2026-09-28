@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { attachmentStoragePath } from "@/lib/whatsapp/image-media";
 
 import { prisma } from "@/lib/prisma";
-import { attachWhatsAppMessageToConversation, findWhatsAppClientId } from "@/lib/conversation-core";
+import { attachCampaignMessageToExistingConversation, attachWhatsAppMessageToConversation, findWhatsAppClientId } from "@/lib/conversation-core";
 import {
   WHATSAPP_MESSAGE_DIRECTION,
   WHATSAPP_MESSAGE_STATUS,
@@ -126,7 +126,7 @@ async function updateCampaignRecipient(
       where: {
         providerMessageId: event.providerMessageId,
         campaign: { workspaceId },
-        status: { in: [RecipientStatus.PENDING, RecipientStatus.PROCESSING] },
+        status: { in: [RecipientStatus.PENDING, RecipientStatus.PROCESSING, RecipientStatus.UNKNOWN] },
       },
       data: { status: RecipientStatus.ACCEPTED, sentAt: occurredAt },
     });
@@ -138,7 +138,7 @@ async function updateCampaignRecipient(
       where: {
         providerMessageId: event.providerMessageId,
         campaign: { workspaceId },
-        status: { in: [RecipientStatus.PENDING, RecipientStatus.PROCESSING, RecipientStatus.ACCEPTED, RecipientStatus.FAILED] },
+        status: { in: [RecipientStatus.PENDING, RecipientStatus.PROCESSING, RecipientStatus.ACCEPTED, RecipientStatus.FAILED, RecipientStatus.UNKNOWN] },
       },
       data: { status: RecipientStatus.DELIVERED, deliveredAt: occurredAt, failedAt: null, errorMessage: null },
     });
@@ -162,9 +162,9 @@ async function updateCampaignRecipient(
       where: {
         providerMessageId: event.providerMessageId,
         campaign: { workspaceId },
-        status: { in: [RecipientStatus.PENDING, RecipientStatus.PROCESSING, RecipientStatus.ACCEPTED] },
+        status: { in: [RecipientStatus.PENDING, RecipientStatus.PROCESSING, RecipientStatus.ACCEPTED, RecipientStatus.UNKNOWN] },
       },
-      data: { status: RecipientStatus.FAILED, failedAt: occurredAt, errorMessage: event.failureMessage },
+      data: { status: RecipientStatus.FAILED, failedAt: occurredAt, errorMessage: event.failureMessage, failureCode: event.failureCode },
     });
   }
 }
@@ -178,7 +178,7 @@ async function processStatus(
   const occurredAt = event.occurredAt ?? receivedAt;
   const existing = await transaction.whatsAppMessage.findUnique({
     where: { providerMessageId: event.providerMessageId },
-    select: { id: true, workspaceId: true, connectionId: true },
+    select: { id: true, workspaceId: true, connectionId: true, campaignRecipientId: true },
   });
 
   if (existing && (existing.workspaceId !== connection.workspaceId || (existing.connectionId && existing.connectionId !== connection.id))) return false;
@@ -189,7 +189,7 @@ async function processStatus(
   if (!correlated && event.clientRequestId) {
     const intent = await transaction.whatsAppMessage.findUnique({
       where: { workspaceId_clientRequestId: { workspaceId: connection.workspaceId, clientRequestId: event.clientRequestId } },
-      select: { id: true, workspaceId: true, connectionId: true, providerMessageId: true, direction: true },
+      select: { id: true, workspaceId: true, connectionId: true, providerMessageId: true, direction: true, campaignRecipientId: true },
     });
     if (intent && intent.connectionId === connection.id && intent.direction === "OUTBOUND" &&
       (intent.providerMessageId === null || intent.providerMessageId === event.providerMessageId)) {
@@ -206,13 +206,14 @@ async function processStatus(
         providerMessageId: event.providerMessageId,
         campaign: { workspaceId: connection.workspaceId },
       },
-      select: { clientId: true },
+      select: { id: true, clientId: true },
     });
     await transaction.whatsAppMessage.createMany({
       data: [{
         workspaceId: connection.workspaceId,
         connectionId: connection.id,
         clientId: recipient?.clientId ?? null,
+        campaignRecipientId: recipient?.id ?? null,
         providerMessageId: event.providerMessageId,
         phoneNumberId: event.phoneNumberId!,
         waId: event.waId,
@@ -256,13 +257,22 @@ async function processStatus(
     });
   }
 
+  if (correlated?.campaignRecipientId) {
+    await transaction.campaignRecipient.updateMany({ where: { id: correlated.campaignRecipientId, campaign: { workspaceId: connection.workspaceId }, providerMessageId: null }, data: { providerMessageId: event.providerMessageId } });
+  }
   await updateCampaignRecipient(transaction, connection.workspaceId, event, occurredAt);
+  if (event.status === "SENT") await transaction.campaignRecipient.updateMany({ where: { providerMessageId: event.providerMessageId, campaign: { workspaceId: connection.workspaceId }, sentAt: null }, data: { sentAt: occurredAt } });
+  if (event.status === "DELIVERED") await transaction.campaignRecipient.updateMany({ where: { providerMessageId: event.providerMessageId, campaign: { workspaceId: connection.workspaceId }, deliveredAt: null, status: "READ" }, data: { deliveredAt: occurredAt } });
   const message = await transaction.whatsAppMessage.findUniqueOrThrow({
     where: { providerMessageId: event.providerMessageId },
-    select: { id: true, waId: true, clientId: true, sentAt: true, createdAt: true },
+    select: { id: true, waId: true, clientId: true, sentAt: true, createdAt: true, campaignRecipientId: true },
   });
   if (message.waId) {
-    await attachWhatsAppMessageToConversation(transaction, {
+    if (message.campaignRecipientId) await attachCampaignMessageToExistingConversation(transaction, {
+      messageId: message.id, workspaceId: connection.workspaceId, connectionId: connection.id,
+      participantId: message.waId, occurredAt: message.sentAt ?? message.createdAt,
+    });
+    else await attachWhatsAppMessageToConversation(transaction, {
       messageId: message.id,
       workspaceId: connection.workspaceId,
       connectionId: connection.id,

@@ -56,7 +56,7 @@ export async function claimCampaignForSending(context: AuthorizationContext, cam
   return prisma.$transaction(async (transaction) => {
     const campaign = await transaction.campaign.findFirst({
       where: { id: campaignId, workspaceId: context.workspaceId, status: CampaignStatus.READY },
-      select: { id: true, name: true },
+      select: { id: true, name: true, deliveryMode: true },
     });
     if (!campaign) return { count: 0 };
 
@@ -72,7 +72,7 @@ export async function claimCampaignForSending(context: AuthorizationContext, cam
         entityType: ACTIVITY_ENTITY.CAMPAIGN,
         entityId: campaign.id,
         action: ACTIVITY_ACTION.CAMPAIGN_SEND_STARTED,
-        metadata: { name: campaign.name, provider: "mock" },
+        metadata: { name: campaign.name, provider: campaign.deliveryMode === "META_WHATSAPP" ? "meta-whatsapp" : "mock" },
       }, transaction);
     }
     return result;
@@ -94,7 +94,7 @@ export async function claimScheduledCampaignForSending(input: {
         scheduleGeneration: input.scheduleGeneration,
         scheduledAt: input.scheduledAt,
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, deliveryMode: true },
     });
     if (!campaign) return false;
 
@@ -123,7 +123,7 @@ export async function claimScheduledCampaignForSending(input: {
       entityType: ACTIVITY_ENTITY.CAMPAIGN,
       entityId: campaign.id,
       action: ACTIVITY_ACTION.CAMPAIGN_SEND_STARTED,
-      metadata: { name: campaign.name, provider: "mock", scheduled: true },
+      metadata: { name: campaign.name, provider: campaign.deliveryMode === "META_WHATSAPP" ? "meta-whatsapp" : "mock", scheduled: true },
     }, transaction);
     return true;
   });
@@ -135,9 +135,11 @@ export async function getCampaignPendingRecipients(context: CampaignExecutionCon
     select: {
       id: true,
       message: true,
+      deliveryMode: true,
+      whatsAppTemplate: true,
       recipients: {
         where: { status: RecipientStatus.PENDING },
-        select: { id: true, nameSnapshot: true, phoneSnapshot: true },
+        select: { id: true, nameSnapshot: true, phoneSnapshot: true, templateParameters: true },
         orderBy: { createdAt: "asc" },
       },
     },
@@ -174,6 +176,7 @@ export async function markRecipientAccepted(
       status: RecipientStatus.ACCEPTED,
       providerMessageId,
       sentAt: acceptedAt,
+      dispatchAcceptedAt: acceptedAt,
       failedAt: null,
       errorMessage: null,
     },
@@ -197,23 +200,24 @@ export async function markRecipientFailed(
   });
 }
 
-function summarizeStatuses(statuses: RecipientStatus[]): CampaignDeliverySummary {
-  return statuses.reduce<CampaignDeliverySummary>(
-    (summary, status) => {
+function summarizeStatuses(recipients: Array<{ status: RecipientStatus; dispatchAcceptedAt: Date | null }>): CampaignDeliverySummary {
+  return recipients.reduce<CampaignDeliverySummary>(
+    (summary, { status, dispatchAcceptedAt }) => {
       if (
+        dispatchAcceptedAt ||
         status === RecipientStatus.ACCEPTED ||
         status === RecipientStatus.DELIVERED ||
         status === RecipientStatus.READ
       ) {
         summary.accepted += 1;
-      } else if (status === RecipientStatus.FAILED) {
+      } else if (status === RecipientStatus.FAILED || status === RecipientStatus.UNKNOWN) {
         summary.failed += 1;
       } else {
         summary.pending += 1;
       }
       return summary;
     },
-    { total: statuses.length, accepted: 0, failed: 0, pending: 0 },
+    { total: recipients.length, accepted: 0, failed: 0, pending: 0 },
   );
 }
 
@@ -223,9 +227,9 @@ export async function getCampaignDeliverySummary(
 ): Promise<CampaignDeliverySummary> {
   const recipients = await prisma.campaignRecipient.findMany({
     where: { campaignId, campaign: { workspaceId: context.workspaceId } },
-    select: { status: true },
+    select: { status: true, dispatchAcceptedAt: true },
   });
-  return summarizeStatuses(recipients.map(({ status }) => status));
+  return summarizeStatuses(recipients);
 }
 
 export async function finalizeCampaignSending(context: CampaignExecutionContext, campaignId: string) {
@@ -242,7 +246,7 @@ export async function finalizeCampaignSending(context: CampaignExecutionContext,
   await prisma.$transaction(async (transaction) => {
     const campaign = await transaction.campaign.findFirst({
       where: { id: campaignId, workspaceId: context.workspaceId, status: CampaignStatus.SENDING },
-      select: { id: true, name: true },
+      select: { id: true, name: true, deliveryMode: true },
     });
     if (!campaign) return;
 
@@ -264,7 +268,7 @@ export async function finalizeCampaignSending(context: CampaignExecutionContext,
       action,
       metadata: {
         name: campaign.name,
-        provider: "mock",
+        provider: campaign.deliveryMode === "META_WHATSAPP" ? "meta-whatsapp" : "mock",
         count: summary.total,
         accepted: summary.accepted,
         failed: summary.failed,
@@ -273,4 +277,16 @@ export async function finalizeCampaignSending(context: CampaignExecutionContext,
   });
 
   return summary;
+}
+
+export async function failCampaignBeforeDispatch(context: CampaignExecutionContext, campaignId: string) {
+  await prisma.$transaction(async (transaction) => {
+    const campaign = await transaction.campaign.findFirst({ where: { id: campaignId, workspaceId: context.workspaceId, status: "SENDING" }, select: { id: true, name: true } });
+    if (!campaign) return;
+    const failed = await transaction.campaign.updateMany({ where: { id: campaignId, workspaceId: context.workspaceId, status: "SENDING" }, data: { status: "FAILED" } });
+    if (failed.count !== 1) return;
+    await transaction.campaignRecipient.updateMany({ where: { campaignId, status: "PENDING" }, data: { status: "FAILED", failedAt: new Date(), failureCode: "TEMPLATE_UNAVAILABLE", errorMessage: "La plantilla o conexión ya no está disponible para enviar. No se envió ningún destinatario pendiente." } });
+    await recordActivity({ ...executionActor(context), entityType: ACTIVITY_ENTITY.CAMPAIGN, entityId: campaignId, action: ACTIVITY_ACTION.CAMPAIGN_FAILED, metadata: { name: campaign.name, provider: "meta-whatsapp", failureCode: "TEMPLATE_UNAVAILABLE" } }, transaction);
+  });
+  return getCampaignDeliverySummary(context, campaignId);
 }

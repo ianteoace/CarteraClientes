@@ -454,6 +454,7 @@ enum RecipientStatus {
   DELIVERED
   READ
   FAILED
+  UNKNOWN
 }
 
 model Campaign {
@@ -461,6 +462,7 @@ model Campaign {
   workspaceId         String
   name                String
   message             String
+  deliveryMode        String              @default("MOCK")
   status              CampaignStatus      @default(DRAFT)
   sourceGroupId       String?
   scheduledAt         DateTime?
@@ -473,6 +475,7 @@ model Campaign {
   sourceGroup         Group?              @relation("SourceGroupCampaigns", fields: [sourceGroupId], references: [id], onDelete: SetNull)
   scheduledByMember   WorkspaceMember?    @relation("CampaignScheduler", fields: [scheduledByMemberId], references: [id], onDelete: SetNull)
   recipients          CampaignRecipient[]
+  whatsAppTemplate    CampaignWhatsAppTemplate?
   workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([sourceGroupId])
@@ -494,13 +497,35 @@ model CampaignRecipient {
   readAt            DateTime?
   failedAt          DateTime?
   errorMessage      String?
+  failureCode       String?
+  templateParameters Json?
+  dispatchAcceptedAt DateTime?
+  whatsAppMessage   WhatsAppMessage?
   createdAt         DateTime        @default(now())
   campaign          Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   client            Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@unique([campaignId, phoneSnapshot])
   @@index([campaignId, status])
+  @@index([providerMessageId])
   @@index([clientId])
+}
+
+model CampaignWhatsAppTemplate {
+  id                   String   @id @default(cuid())
+  campaignId           String   @unique
+  whatsappConnectionId String?
+  metaTemplateId       String?
+  templateName         String
+  language             String
+  category             String
+  componentsSnapshot   Json
+  parameterMapping     Json
+  createdAt            DateTime @default(now())
+  campaign             Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  whatsappConnection   WhatsAppConnection? @relation(fields: [whatsappConnectionId], references: [id], onDelete: SetNull)
+
+  @@index([whatsappConnectionId])
 }
 
 model WhatsAppConnection {
@@ -515,6 +540,7 @@ model WhatsAppConnection {
   workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages           WhatsAppMessage[]
   conversations      Conversation[]
+  campaignTemplates  CampaignWhatsAppTemplate[]
 
   @@index([workspaceId])
   @@index([wabaId])
@@ -526,6 +552,7 @@ model WhatsAppMessage {
   connectionId      String?
   clientId          String?
   conversationId    String?
+  campaignRecipientId String?            @unique
   providerMessageId String?             @unique
   clientRequestId   String?
   sentByMemberId    String?
@@ -549,6 +576,7 @@ model WhatsAppMessage {
   connection        WhatsAppConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
   conversation      Conversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  campaignRecipient CampaignRecipient?  @relation(fields: [campaignRecipientId], references: [id], onDelete: SetNull)
   sentByMember      WorkspaceMember?    @relation("InboxMessageSender", fields: [sentByMemberId], references: [id], onDelete: SetNull)
   sourceCaseConversations CaseConversationSourceMessage[]
   legacySourceCaseConversations CaseConversation[]
@@ -559,6 +587,7 @@ model WhatsAppMessage {
   @@index([workspaceId, createdAt])
   @@index([sentByMemberId])
   @@index([connectionId, createdAt])
+  @@index([workspaceId, connectionId, waId])
   @@index([clientId, createdAt])
   @@index([phoneNumberId, createdAt])
   @@index([conversationId, createdAt, id])

@@ -6,6 +6,7 @@ import { WorkspacePermission } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceModules, isModuleEnabled } from "@/lib/workspace-module-service";
 import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
+import { getCampaignMetaAvailability } from "@/lib/campaign-template-service";
 
 export const dynamic = "force-dynamic";
 
@@ -18,5 +19,5 @@ export default async function NewCampaignPage({ searchParams }: { searchParams: 
   const groups = await listCampaignSourceGroups(context);
 
   const { manual } = await searchParams;
-  return <CampaignForm groups={groups} manual={manual === "1"} />;
+  return <CampaignForm groups={groups} manual={manual === "1"} metaAvailability={await getCampaignMetaAvailability(context)} />;
 }

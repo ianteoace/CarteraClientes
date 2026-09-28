@@ -10,7 +10,7 @@ import {
 
 export class MetaCampaignTemplateRequiredError extends Error {
   constructor() {
-    super("Meta no admite campañas de texto libre en esta versión. Usá el proveedor mock hasta implementar campañas basadas en templates aprobados.");
+    super("Meta no admite campañas de texto libre. Usá una plantilla aprobada para WhatsApp real o el proveedor mock para simular.");
     this.name = "MetaCampaignTemplateRequiredError";
   }
 }

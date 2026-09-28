@@ -1,4 +1,5 @@
 import "server-only";
+import type { MetaTemplate } from "@/lib/campaign-delivery";
 
 import { isWhatsAppImageMime, MAX_WHATSAPP_IMAGE_BYTES, verifyWhatsAppImage, WhatsAppMediaError } from "@/lib/whatsapp/image-media";
 
@@ -64,6 +65,8 @@ export type SendTemplateMessageInput = {
   languageCode: string;
   parameters?: TemplateParameter[];
   components?: WhatsAppTemplateComponent[];
+  clientRequestId?: string;
+  signal?: AbortSignal;
 };
 
 export type SendTextMessageInput = {
@@ -113,6 +116,34 @@ export class WhatsAppCloudApiClient {
     private readonly configuration: WhatsAppConfiguration = getWhatsAppConfiguration(),
     private readonly fetcher: typeof fetch = fetch,
   ) {}
+
+  /** Server-only catalog. Pagination uses only opaque cursors, never remote next URLs. */
+  async listTemplates(name?: string): Promise<MetaTemplate[]> {
+    if (name && !/^[a-z0-9_]{1,512}$/.test(name)) throw new WhatsAppInputError("La plantilla no es válida.");
+    const templates: MetaTemplate[] = [];
+    let after: string | undefined;
+    const cursors = new Set<string>();
+    for (let page = 0; page < 20; page++) {
+      const url = new URL(`https://graph.facebook.com/${this.configuration.apiVersion}/${this.configuration.wabaId}/message_templates`);
+      url.searchParams.set("fields", "id,name,language,category,status,components,parameter_format");
+      url.searchParams.set("limit", "100");
+      if (name) url.searchParams.set("name", name);
+      if (after) url.searchParams.set("after", after);
+      let response: Response;
+      try {
+        response = await this.fetcher(url, { headers: { Authorization: `Bearer ${this.configuration.accessToken}` }, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(15_000) });
+      } catch { throw new WhatsAppApiError("No se pudieron consultar las plantillas de WhatsApp.", { httpStatus: 0 }); }
+      const data = await response.json().catch(() => null) as (MetaErrorResponse & { data?: MetaTemplate[]; paging?: { next?: string; cursors?: { after?: string } } }) | null;
+      if (!response.ok) throw new WhatsAppApiError(safeMetaMessage(data?.error?.message ?? "Meta rechazó la consulta de plantillas.", this.configuration.accessToken), { httpStatus: response.status, metaCode: data?.error?.code, metaSubcode: data?.error?.error_subcode });
+      if (!Array.isArray(data?.data)) throw new WhatsAppApiError("Meta devolvió un catálogo de plantillas inválido.", { httpStatus: response.status });
+      templates.push(...data.data);
+      if (!data.paging?.next) return templates;
+      after = data.paging.cursors?.after;
+      if (!after || cursors.has(after) || after.length > 4096) break;
+      cursors.add(after);
+    }
+    throw new WhatsAppInputError("El catálogo de plantillas es demasiado grande o está incompleto. Intentá actualizarlo.");
+  }
 
   async retrieveImage(mediaId: string, phoneNumberId: string, expected: { mimeType: string; sha256?: string | null }) {
     if (!/^\d{1,100}$/.test(mediaId) || !/^\d+$/.test(phoneNumberId) || !isWhatsAppImageMime(expected.mimeType)) {
@@ -204,7 +235,8 @@ export class WhatsAppCloudApiClient {
     return this.sendMessage(input.to, input.recipientFormat ?? "internal", {
       type: "template",
       template: { name: templateName, language: { code: languageCode }, ...(components ? { components } : {}) },
-    });
+      ...(input.clientRequestId ? { biz_opaque_callback_data: input.clientRequestId } : {}),
+    }, input.signal);
   }
 
   async sendTextMessage(input: SendTextMessageInput) {
