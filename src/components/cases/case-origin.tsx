@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ConversationImage } from "@/components/inbox/conversation-image";
 import type { AttachmentPreview } from "@/lib/whatsapp/attachment-types";
+import { isEligibleCaseSourceMessage } from "@/lib/case-source-message";
 
 type Origin = {
   id: string;
@@ -19,7 +20,7 @@ export function CaseOrigin({ origins }: { origins: Origin[] }) {
         <summary className="cursor-pointer font-medium">{origin.sourceMessages.length} {origin.sourceMessages.length === 1 ? "mensaje de origen" : "mensajes de origen"}</summary>
         <div className="mt-3 divide-y divide-border border-y border-border">{origin.sourceMessages.map(({ messageId, message }) => <div className="py-3" key={messageId}>
           <p className="text-xs text-muted">Cliente · {(message.sentAt ?? message.createdAt).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>
-          {message.direction === "INBOUND" && message.type === "IMAGE" ? <div className="mt-2"><ConversationImage attachment={message.attachments[0]} /></div> : <p className="mt-1 whitespace-pre-wrap break-words">{message.direction === "INBOUND" && message.type === "TEXT" ? message.textBody || "Mensaje de texto" : "Mensaje no disponible"}</p>}
+          {isEligibleCaseSourceMessage(message) && message.type === "IMAGE" ? <div className="mt-2"><ConversationImage attachment={message.attachments[0]} /></div> : <p className="mt-1 whitespace-pre-wrap break-words">{isEligibleCaseSourceMessage(message) && message.type === "TEXT" ? message.textBody || "Mensaje de texto" : "Mensaje no disponible"}</p>}
         </div>)}</div>
       </details> : null}
     </div>)}</div>

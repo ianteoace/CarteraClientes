@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { GroupScopeMode, WorkspacePermission, WorkspaceRole, type Workspace } from "@prisma/client";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { CaseSourcePreview } from "@/components/cases/case-source-preview";
+import { CaseOrigin } from "@/components/cases/case-origin";
+import { isEligibleCaseSourceMessage } from "@/lib/case-source-message";
 import type { AuthorizationContext } from "@/lib/authorization";
 import { getCaseOrigin, getConversationCaseCreationContext } from "@/lib/case-conversation-repository";
 import { buildCaseSourceDescription } from "@/lib/case-source-presentation";
@@ -22,6 +28,10 @@ import { parseWhatsAppWebhookPayload } from "@/lib/whatsapp/webhook-types";
 const runId = randomUUID();
 const passed = new Set<string>();
 const pass = (...labels: string[]) => labels.forEach((label) => passed.add(label));
+const sourcePassed = new Set<string>();
+const passSource = (...labels: string[]) => labels.forEach((label) => sourcePassed.add(label));
+const testRouter: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {}, bfcacheId: "qa" };
+const render = (node: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: testRouter }, node));
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0xff, 0xd9]);
 const checksum = createHash("sha256").update(jpeg).digest("base64");
 const config = { accessToken: "qa-injected-not-a-real-token", apiVersion: "v23.0", phoneNumberId: "1000000000", wabaId: "2000000000" };
@@ -152,6 +162,56 @@ async function databaseTests() {
     const source = await getCaseOrigin(owner, ticket!.id);
     assert.equal(source[0].sourceMessages.find((item) => item.messageId === message.id)?.message.attachments[0]?.id, attachment.id); pass("AE");
     await assert.rejects(getCaseOrigin(noInbox, ticket!.id)); pass("AF");
+    // Regression: no-caption IMAGE still has an ID and thumbnail in the actual form preview.
+    const attachmentCount = await prisma.whatsAppMessageAttachment.count({ where: { workspaceId: workspace.id } });
+    const uploadsBeforeCases = uploads;
+    const sourcesBefore = await prisma.caseConversationSourceMessage.count({ where: { messageId: message.id } });
+    const onlyImageOrigin = { conversationId, sourceMessageIds: [message.id] };
+    const imageWithCaption = await getConversationCaseCreationContext(owner, "TICKET", onlyImageOrigin);
+    assert.ok(imageWithCaption);
+    const captionHtml = render(createElement(CaseSourcePreview, { messages: imageWithCaption.sourceMessages }));
+    assert.ok(captionHtml.includes("QA image caption") && captionHtml.includes(`/api/bandeja/attachments/${attachment.id}`));
+    const captionTicket = await createTicket(owner, { contactId: contact.id, title: "QA caption image", origin: onlyImageOrigin });
+    assert.ok(captionTicket); passSource("E");
+    await prisma.whatsAppMessageAttachment.update({ where: { id: attachment.id }, data: { caption: null } });
+    const imageWithoutCaption = await getConversationCaseCreationContext(owner, "TICKET", onlyImageOrigin);
+    assert.equal(imageWithoutCaption?.sourceMessages.length, 1);
+    assert.equal(buildCaseSourceDescription(imageWithoutCaption!.sourceMessages), "");
+    const noCaptionHtml = render(createElement(CaseSourcePreview, { messages: imageWithoutCaption!.sourceMessages }));
+    assert.ok(noCaptionHtml.includes("1 mensaje seleccionado") && noCaptionHtml.includes(`/api/bandeja/attachments/${attachment.id}`));
+    assert.ok(!noCaptionHtml.includes(attachment.storagePath) && !noCaptionHtml.includes(attachment.metaMediaId!));
+    const imageTicket = await createTicket(owner, { contactId: contact.id, title: "QA no-caption image", description: "", origin: onlyImageOrigin });
+    assert.ok(imageTicket); passSource("D", "N");
+    assert.equal(await prisma.caseConversationSourceMessage.count({ where: { messageId: message.id } }), sourcesBefore + 2); passSource("F");
+    const imageTicketOrigin = await getCaseOrigin(owner, imageTicket!.id);
+    assert.ok(render(createElement(CaseOrigin, { origins: imageTicketOrigin })).includes(`/api/bandeja/attachments/${attachment.id}`)); passSource("G");
+    await assert.rejects(getConversationCaseCreationContext(noInbox, "TICKET", onlyImageOrigin));
+    await assert.rejects(getCaseOrigin(noInbox, imageTicket!.id)); passSource("H");
+    const textOnly = await getConversationCaseCreationContext(owner, "TICKET", { conversationId, sourceMessageIds: [text.id] });
+    assert.equal(buildCaseSourceDescription(textOnly!.sourceMessages), "QA text");
+    assert.ok(await createTicket(owner, { contactId: contact.id, title: "QA text only", origin: { conversationId, sourceMessageIds: [text.id] } })); passSource("B");
+    const mixedWithoutCaption = await getConversationCaseCreationContext(owner, "TICKET", origin);
+    assert.equal(mixedWithoutCaption?.sourceMessages.length, 2);
+    assert.equal(buildCaseSourceDescription(mixedWithoutCaption!.sourceMessages), "QA text");
+    assert.ok(render(createElement(CaseSourcePreview, { messages: mixedWithoutCaption!.sourceMessages })).includes("2 mensajes seleccionados")); passSource("C");
+    const outboundImage = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId, phoneNumberId: phone, direction: "OUTBOUND", type: "IMAGE", status: "ACCEPTED" } });
+    const otherConversation = await prisma.conversation.create({ data: { workspaceId: workspace.id, externalParticipantId: `qa-source-other-${runId}`, clientId: contact.id, lastMessageAt: new Date() } });
+    const otherImage = await prisma.whatsAppMessage.create({ data: { workspaceId: workspace.id, conversationId: otherConversation.id, phoneNumberId: phone, direction: "INBOUND", type: "IMAGE", status: "SENT" } });
+    const foreignImage = await prisma.whatsAppMessage.create({ data: { workspaceId: foreign.id, phoneNumberId: "qa-foreign", direction: "INBOUND", type: "IMAGE", status: "SENT" } });
+    for (const [id, label] of [[outboundImage.id, "I"], [otherImage.id, "J"], [foreignImage.id, "K"]]) {
+      const deniedOrigin = { conversationId, sourceMessageIds: [id] };
+      await assert.rejects(getConversationCaseCreationContext(owner, "TICKET", deniedOrigin));
+      await assert.rejects(createTicket(owner, { contactId: contact.id, title: "QA denied source", origin: deniedOrigin }));
+      await assert.rejects(createOrder(owner, { contactId: contact.id, items: [], origin: deniedOrigin })); passSource(label);
+    }
+    const imageOrder = await createOrder(owner, { contactId: contact.id, items: [], origin: onlyImageOrigin });
+    assert.ok(imageOrder);
+    const imageOrderOrigin = await getCaseOrigin(owner, imageOrder!.id);
+    assert.equal(imageOrderOrigin[0].sourceMessages.length, 1);
+    assert.equal(imageOrderOrigin[0].sourceMessages[0].messageId, message.id); passSource("L");
+    assert.equal((await getCaseOrigin(owner, order!.id))[0].sourceMessages.length, 2); passSource("M");
+    assert.equal(await prisma.whatsAppMessageAttachment.count({ where: { workspaceId: workspace.id } }), attachmentCount);
+    assert.equal(uploads, uploadsBeforeCases); passSource("O");
     assert.ok((await prisma.activity.findMany({ where: { workspaceId: workspace.id } })).every((item) => !JSON.stringify(item.metadata).includes("QA image caption")));
     const failingId = `wamid.qa.failed.${runId}`;
     await processWhatsAppWebhookPayload(payload(phone, waba, failingId, participant), { processImage: async () => {} });
@@ -187,6 +247,10 @@ async function databaseTests() {
 }
 
 async function uiChecks() {
+  assert.equal(isEligibleCaseSourceMessage({ direction: "INBOUND", type: "IMAGE" }), true); passSource("A");
+  assert.equal(isEligibleCaseSourceMessage({ direction: "INBOUND", type: "TEXT" }), true);
+  assert.equal(isEligibleCaseSourceMessage({ direction: "OUTBOUND", type: "IMAGE" }), false);
+  assert.equal(isEligibleCaseSourceMessage({ direction: "INBOUND", type: "UNSUPPORTED" }), false);
   assert.equal(conversationPreview({ type: "IMAGE", textBody: null }), "Imagen");
   assert.equal(conversationPreview({ type: "IMAGE", textBody: null, attachments: [{ caption: "QA caption" }] }), "Imagen · QA caption"); pass("U");
   const component = await readFile("src/components/inbox/conversation-image.tsx", "utf8");
@@ -199,6 +263,14 @@ async function uiChecks() {
   assert.ok(component.includes("attachment.caption") && component.includes("whitespace-pre-wrap")); pass("W");
   assert.ok(component.includes("Imagen no disponible") && component.includes("onError")); pass("X");
   assert.ok(origin.includes("ConversationImage") && !origin.includes("storagePath") && !component.includes("process.env"));
+  for (const page of ["src/app/tickets/nuevo/page.tsx", "src/app/pedidos/nuevo/page.tsx"]) {
+    const source = await readFile(page, "utf8");
+    assert.ok(source.includes("<CaseSourcePreview messages={origin.sourceMessages}") && source.includes("sourceMessageIds: origin.sourceMessages.map"));
+  }
+  const selection = await readFile("src/components/inbox/message-selection.tsx", "utf8");
+  const css = await readFile("src/app/globals.css", "utf8");
+  assert.ok(thread.includes("isEligibleCaseSourceMessage(message)") && selection.includes('params.append("sourceMessageIds", id)'));
+  assert.ok(css.includes("width:44px; min-height:44px") && css.includes(".inbox-message-selected .inbox-message-bubble")); passSource("P");
 }
 
 async function main() {
@@ -207,5 +279,7 @@ async function main() {
   const labels = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ"];
   assert.deepEqual([...passed].sort(), labels.sort());
   console.log(`WhatsApp images A–AJ: ${passed.size}/${labels.length} OK (UI checks structural; interactive smoke pending)`);
+  assert.deepEqual([...sourcePassed].sort(), [..."ABCDEFGHIJKLMNOP"].sort());
+  console.log(`IMAGE sources regression A–P: ${sourcePassed.size}/16 OK; form and detail SSR thumbnail rendering verified; mobile checks structural`);
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => prisma.$disconnect());

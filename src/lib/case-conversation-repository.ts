@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { requireModule } from "@/lib/workspace-module-service";
 import { WORKSPACE_MODULE } from "@/lib/workspace-modules";
 import { attachmentPreviewSelect } from "@/lib/whatsapp/attachment-types";
+import { isEligibleCaseSourceMessage } from "@/lib/case-source-message";
 
 export class CaseConversationValidationError extends Error {}
 
@@ -53,11 +54,11 @@ export async function getConversationCaseCreationContext(
   if (!contact) return null;
   const sourceMessageIds = getSourceMessageIds(origin);
   const sourceMessages = sourceMessageIds.length ? await prisma.whatsAppMessage.findMany({
-    where: { id: { in: sourceMessageIds }, conversationId: conversation.id, workspaceId: context.workspaceId, direction: "INBOUND", type: { in: ["TEXT", "IMAGE"] } },
-    select: { id: true, type: true, textBody: true, createdAt: true, attachments: { select: { caption: true }, take: 1 } },
+    where: { id: { in: sourceMessageIds }, conversationId: conversation.id, workspaceId: context.workspaceId },
+    select: { id: true, direction: true, type: true, textBody: true, createdAt: true, attachments: { select: attachmentPreviewSelect, orderBy: { createdAt: "asc" } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   }) : [];
-  if (sourceMessages.length !== sourceMessageIds.length) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación.");
+  if (sourceMessages.length !== sourceMessageIds.length || !sourceMessages.every(isEligibleCaseSourceMessage)) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación o no son compatibles.");
   return { conversation, sourceMessages, contactMissing: false as const };
 }
 
@@ -89,10 +90,11 @@ export async function linkCaseToConversation(
   if (contact !== 1) throw new CaseConversationValidationError("Ya no tenés acceso al contacto de esta conversación.");
   const sourceMessageIds = getSourceMessageIds(origin);
   if (sourceMessageIds.length) {
-    const source = await transaction.whatsAppMessage.count({
-      where: { id: { in: sourceMessageIds }, workspaceId: context.workspaceId, conversationId: conversation.id, direction: "INBOUND", type: { in: ["TEXT", "IMAGE"] } },
+    const source = await transaction.whatsAppMessage.findMany({
+      where: { id: { in: sourceMessageIds }, workspaceId: context.workspaceId, conversationId: conversation.id },
+      select: { direction: true, type: true },
     });
-    if (source !== sourceMessageIds.length) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación.");
+    if (source.length !== sourceMessageIds.length || !source.every(isEligibleCaseSourceMessage)) throw new CaseConversationValidationError("Uno o más mensajes de origen no pertenecen a esta conversación o no son compatibles.");
   }
   const link = await transaction.caseConversation.create({ data: {
     workspaceId: context.workspaceId,

@@ -160,7 +160,7 @@ async function staticChecks() {
   assert.ok(!conversationPage.includes("providerMessageId") && !conversationPage.includes("phoneNumberId") && !conversationPage.includes("process.env")); pass("AF");
   assert.ok(ticketPage.includes("CaseOrigin") && orderPage.includes("CaseOrigin"));
   assert.ok(webhook.includes("processWhatsAppWebhookPayload") && reply.includes("sendConversationReply")); pass("AH");
-  assert.ok(conversationPage.includes("MessageSelectionActions") && conversationPage.includes('["TEXT", "IMAGE"].includes(message.type)'));
+  assert.ok(conversationPage.includes("MessageSelectionActions") && conversationPage.includes('isEligibleCaseSourceMessage(message)'));
   assert.ok(selection.includes('params.append("sourceMessageIds", id)') && selection.includes("Seleccionar mensajes") && css.includes(".inbox-message-select { display:flex") && css.includes("min-height:44px")); pass("AI");
   assert.ok(migration.includes('INSERT INTO "CaseConversationSourceMessage"') && migration.includes('c."sourceMessageId"') && migration.includes('Keep the legacy column temporarily')); pass("AJ");
 }
