@@ -125,6 +125,11 @@ body:has(.inbox-page) .app-content { height:100dvh; min-height:0; overflow:hidde
 .inbox-composer-input { max-height:120px; overflow-y:auto; resize:vertical; }
 .inbox-channel-label::before { display:inline-block; width:7px; height:7px; flex:none; margin-right:5px; border-radius:50%; background:#128C7E; vertical-align:middle; content:""; }
 .inbox-composer .inbox-channel-label::before { margin-right:0; }
+.inbox-email .inbox-channel-label::before { width:11px; height:8px; border:1px solid #64748b; border-radius:1px; background:linear-gradient(145deg,transparent 44%,#64748b 46%,#64748b 53%,transparent 55%); }
+.inbox-email [aria-label="No leído"] { background:#64748b; box-shadow:0 0 0 1px rgb(100 116 139 / 35%),0 0 0 3px rgb(100 116 139 / 9%); }
+.inbox-email .inbox-thread-scroll { background:#fff; background-image:none; }
+.email-message-list { width:100%; max-width:780px; margin:0 auto; min-width:0; }
+.email-message + .email-message { border-top:1px solid var(--border); }
 .inbox-message-list > .message-item + .message-item { margin-top:7px; }
 .inbox-message-list > .inbox-message-inbound + .inbox-message-outbound,
 .inbox-message-list > .inbox-message-outbound + .inbox-message-inbound { margin-top:14px; }

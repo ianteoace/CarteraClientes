@@ -10,7 +10,7 @@ import { fixture, constants } from '../tests/visual-system-fixture.mjs';
 const root = process.cwd();
 if (process.argv.includes('--meta-campaigns')) fixture.getCampaignDetails = fixture.getMetaCampaignDetails;
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'billetera-visual-'));
-const pages = ['tickets/page', 'tickets/nuevo/page', 'tickets/[number]/page', 'pedidos/page', 'pedidos/nuevo/page', 'pedidos/[number]/page', 'incidencias/page', 'incidencias/nueva/page', 'incidencias/[number]/page', 'campanas/page', 'campanas/nueva/page', 'campanas/[campaignId]/page', 'equipo/page', 'equipo/[memberId]/page', 'actividad/page', 'configuracion/page'];
+const pages = process.argv.includes('--email-inbox') ? ['bandeja/page', 'bandeja/[conversationId]/page', 'configuracion/page'] : ['tickets/page', 'tickets/nuevo/page', 'tickets/[number]/page', 'pedidos/page', 'pedidos/nuevo/page', 'pedidos/[number]/page', 'incidencias/page', 'incidencias/nueva/page', 'incidencias/[number]/page', 'campanas/page', 'campanas/nueva/page', 'campanas/[campaignId]/page', 'equipo/page', 'equipo/[memberId]/page', 'actividad/page', 'configuracion/page'];
 const require = createRequire(import.meta.url);
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
@@ -20,7 +20,7 @@ const output = path.join(temporary, 'pages.cjs');
 let preserve = false;
 try {
   await build({ stdin: { contents: pages.map((route, index) => `export { default as page${index} } from ${JSON.stringify(path.join(root, 'src/app', route + '.tsx'))};`).join('\n'), resolveDir: root, loader: 'tsx' }, outfile: output, bundle: true, platform: 'node', format: 'cjs', packages: 'external', alias: { '@': path.join(root, 'src') }, plugins: [{ name: 'presentation-fixtures', setup(builder) {
-    builder.onResolve({ filter: /^@\/lib\/(authorization|auth\/server|.*-service|.*-repository)$/ }, ({ path: module }) => ({ path: module, namespace: 'visual-data' }));
+    builder.onResolve({ filter: /^@\/lib\/(authorization|auth\/server|email-inbound\/repository|.*-service|.*-repository)$/ }, ({ path: module }) => ({ path: module, namespace: 'visual-data' }));
     builder.onLoad({ filter: /.*/, namespace: 'visual-data' }, () => ({ contents: `const f=globalThis.__visualFixture; const c=globalThis.__visualConstants;\n${Object.keys(fixture).map((name) => `export const ${name}=(...args)=>f.${name}(...args);`).join('\n')}\n${Object.keys(constants).map((name) => `export const ${name}=c.${name};`).join('\n')}\nexport class CaseConversationValidationError extends Error {}\nexport class TeamMemberNotFoundError extends Error {}`, loader: 'js' }));
     builder.onResolve({ filter: /^@\/app\/.*(?:actions|invitation-actions)$/ }, ({ path: module }) => ({ path: module, namespace: 'visual-actions' }));
     builder.onLoad({ filter: /.*/, namespace: 'visual-actions' }, async ({ path: module }) => {
@@ -45,7 +45,7 @@ try {
   const css = compiler.build(scanner.scan());
   let count = 0;
   for (let i = 0; i < pages.length; i++) {
-    const tree = await rendered[`page${i}`]({ params: Promise.resolve({ number: '42', memberId: 'visual-member', campaignId: 'visual-campaign' }), searchParams: Promise.resolve({}) });
+    const tree = await rendered[`page${i}`]({ params: Promise.resolve({ number: '42', memberId: 'visual-member', campaignId: 'visual-campaign', conversationId: 'visual-email' }), searchParams: Promise.resolve({}) });
     const content = renderToStaticMarkup(React.createElement(AppRouterContext.Provider, { value: router }, tree));
     assert.ok(content.includes('<h1'), pages[i] + ': heading');
     assert.ok(!content.includes('min-w-[900px]') && !content.includes('min-w-[760px]'), pages[i] + ': no forced wide table');

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test:email-inbox": "node --env-file=.env --env-file-if-exists=.env.local scripts/run-email-inbox-tests.mjs",
     "test:meta-campaigns": "node --env-file=.env --env-file-if-exists=.env.local scripts/run-meta-campaign-tests.mjs",
     "test:whatsapp-webhooks": "node --env-file=.env --env-file-if-exists=.env.local scripts/run-whatsapp-webhook-tests.mjs",
     "test:inbox-reply": "node --env-file=.env --env-file-if-exists=.env.local scripts/run-inbox-reply-tests.mjs",
@@ -26,6 +27,7 @@
     "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "svix": "^2.5.0",
     "workflow": "^4.8.9"
   },
   "devDependencies": {

@@ -43,7 +43,7 @@ export async function getConversationCaseCreationContext(
   await requireModule(context, access.module);
   requirePermission(context, access.create);
   const conversation = await prisma.conversation.findFirst({
-    where: { id: origin.conversationId, ...getConversationScopeFilter(context) },
+    where: { id: origin.conversationId, ...getConversationScopeFilter(context), channel: "WHATSAPP" },
     select: { id: true, clientId: true, client: { select: { id: true, name: true } } },
   });
   if (!conversation) return null;
@@ -80,7 +80,7 @@ export async function linkCaseToConversation(
   });
   if (enabled !== 2) throw new CaseConversationValidationError("La Bandeja o el módulo de la operación ya no está disponible.");
   const conversation = await transaction.conversation.findFirst({
-    where: { id: origin.conversationId.trim(), ...getConversationScopeFilter(context) },
+    where: { id: origin.conversationId.trim(), ...getConversationScopeFilter(context), channel: "WHATSAPP" },
     select: { id: true, clientId: true },
   });
   if (!conversation || conversation.clientId !== caseRecord.contactId) {

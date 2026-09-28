@@ -26,11 +26,12 @@ export async function requireInboxAccess(context: AuthorizationContext, permissi
   requirePermission(context, permission);
 }
 
-type InboxFilter = "all" | "unread";
+export type InboxFilter = "all" | "unread";
+export type InboxChannel = "all" | "WHATSAPP" | "EMAIL";
 
 export async function listConversations(
   context: AuthorizationContext,
-  input: { search?: string; filter?: InboxFilter; cursor?: string },
+  input: { search?: string; filter?: InboxFilter; channel?: InboxChannel; cursor?: string },
 ) {
   await requireInboxAccess(context);
   const search = input.search?.trim().slice(0, 100) ?? "";
@@ -52,30 +53,38 @@ export async function listConversations(
   const searchSql = search ? Prisma.sql`
     AND (cl."name" ILIKE ${`%${search}%`} OR cl."phone" ILIKE ${`%${search}%`}
       OR cl."email" ILIKE ${`%${search}%`} OR c."externalDisplayName" ILIKE ${`%${search}%`}
-      OR c."externalParticipantId" ILIKE ${`%${search}%`})` : Prisma.empty;
-  const unreadSql = input.filter === "unread" ? Prisma.sql`
-    AND EXISTS (
+      OR c."externalParticipantId" ILIKE ${`%${search}%`} OR c."subject" ILIKE ${`%${search}%`}
+      OR EXISTS (SELECT 1 FROM "EmailMessage" em WHERE em."conversationId" = c."id"
+        AND em."workspaceId" = c."workspaceId"
+        AND (em."fromAddress" ILIKE ${`%${search}%`} OR em."fromName" ILIKE ${`%${search}%`} OR em."subject" ILIKE ${`%${search}%`})))` : Prisma.empty;
+  const isUnread = Prisma.sql`(EXISTS (
       SELECT 1 FROM "WhatsAppMessage" incoming
-      WHERE incoming."conversationId" = c."id" AND incoming."direction" = 'INBOUND'
+      WHERE incoming."conversationId" = c."id" AND incoming."workspaceId" = c."workspaceId" AND incoming."direction" = 'INBOUND'
         AND COALESCE(incoming."sentAt", incoming."createdAt") >
           COALESCE(rs."lastReadAt", '-infinity'::timestamp)
-    )` : Prisma.empty;
+    ) OR EXISTS (
+      SELECT 1 FROM "EmailMessage" incoming
+      WHERE incoming."conversationId" = c."id" AND incoming."workspaceId" = c."workspaceId" AND incoming."direction" = 'INBOUND'
+        AND incoming."receivedAt" > COALESCE(rs."lastReadAt", '-infinity'::timestamp)
+    ))`;
+  const unreadSql = input.filter === "unread" ? Prisma.sql`AND ${isUnread}` : Prisma.empty;
+  const channelSql = input.channel && input.channel !== "all" ? Prisma.sql`AND c."channel" = ${input.channel}` : Prisma.empty;
   const cursorSql = cursor ? Prisma.sql`
     AND (c."lastMessageAt" < ${cursor.lastMessageAt}
       OR (c."lastMessageAt" = ${cursor.lastMessageAt} AND c."id" < ${cursor.id}))` : Prisma.empty;
 
-  const ids = await prisma.$queryRaw<Array<{ id: string; unread: boolean }>>`
-    SELECT c."id", EXISTS (
-      SELECT 1 FROM "WhatsAppMessage" incoming
-      WHERE incoming."conversationId" = c."id" AND incoming."direction" = 'INBOUND'
-        AND COALESCE(incoming."sentAt", incoming."createdAt") >
-          COALESCE(rs."lastReadAt", '-infinity'::timestamp)
-    ) AS "unread"
+  const ids = await prisma.$queryRaw<Array<{ id: string; unread: boolean; emailSubject: string | null; emailSnippet: string | null }>>`
+    SELECT c."id", ${isUnread} AS "unread", latest."subject" AS "emailSubject", latest."snippet" AS "emailSnippet"
     FROM "Conversation" c
     LEFT JOIN "Client" cl ON cl."id" = c."clientId" AND cl."workspaceId" = c."workspaceId"
     LEFT JOIN "ConversationReadState" rs ON rs."conversationId" = c."id" AND rs."memberId" = ${context.memberId}
+    LEFT JOIN LATERAL (
+      SELECT em."subject", LEFT(em."textBody", 90) AS "snippet" FROM "EmailMessage" em
+      WHERE em."conversationId" = c."id" AND em."workspaceId" = c."workspaceId"
+      ORDER BY em."receivedAt" DESC, em."id" DESC LIMIT 1
+    ) latest ON c."channel" = 'EMAIL'
     WHERE c."workspaceId" = ${context.workspaceId}
-      ${scopeSql} ${searchSql} ${unreadSql} ${cursorSql}
+      ${scopeSql} ${searchSql} ${unreadSql} ${channelSql} ${cursorSql}
     ORDER BY c."lastMessageAt" DESC, c."id" DESC
     LIMIT 31
   `;
@@ -83,16 +92,16 @@ export async function listConversations(
   const rows = await prisma.conversation.findMany({
     where: { id: { in: pageIds.map(({ id }) => id) }, ...getConversationScopeFilter(context) },
     select: {
-      id: true, channel: true, status: true, externalParticipantId: true, externalDisplayName: true,
+      id: true, channel: true, status: true, subject: true, externalParticipantId: true, externalDisplayName: true,
       lastMessageAt: true, client: { select: { id: true, name: true, company: true } },
       messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, select: { type: true, textBody: true, attachments: { take: 1, select: { caption: true } } } },
     },
   });
   const rowById = new Map(rows.map((row) => [row.id, row]));
   return {
-    items: pageIds.flatMap(({ id, unread }) => {
+    items: pageIds.flatMap(({ id, unread, emailSubject, emailSnippet }) => {
       const row = rowById.get(id);
-      return row ? [{ ...row, unread, lastMessage: row.messages[0] ?? null }] : [];
+      return row ? [{ ...row, unread, lastMessage: row.messages[0] ?? null, emailPreview: emailSubject ? { subject: emailSubject, snippet: emailSnippet } : null }] : [];
     }),
     nextCursor: ids.length > 30 ? pageIds.at(-1)?.id ?? null : null,
   };
@@ -103,18 +112,27 @@ export async function getConversationDetails(context: AuthorizationContext, id: 
   const conversation = await prisma.conversation.findFirst({
     where: { id, ...getConversationScopeFilter(context) },
     select: {
-      id: true, workspaceId: true, channel: true, status: true, clientId: true,
+      id: true, workspaceId: true, channel: true, status: true, clientId: true, subject: true,
       externalParticipantId: true, externalDisplayName: true, lastMessageAt: true,
       lastInboundAt: true,
       client: { select: { id: true, name: true, company: true } },
     },
   });
   if (!conversation) return null;
-  const cursor = before ? await prisma.whatsAppMessage.findFirst({
+  const emailCursor = conversation.channel === "EMAIL" && before ? await prisma.emailMessage.findFirst({
+    where: { id: before, conversationId: id, workspaceId: context.workspaceId }, select: { id: true, receivedAt: true },
+  }) : null;
+  const emails = conversation.channel === "EMAIL" ? await prisma.emailMessage.findMany({ where: {
+    conversationId: id, workspaceId: context.workspaceId,
+    ...(emailCursor ? { OR: [{ receivedAt: { lt: emailCursor.receivedAt } }, { receivedAt: emailCursor.receivedAt, id: { lt: emailCursor.id } }] } : {}),
+  }, orderBy: [{ receivedAt: "desc" }, { id: "desc" }], take: 101,
+    select: { id: true, fromAddress: true, fromName: true, subject: true, textBody: true, receivedAt: true, createdAt: true, attachmentCount: true },
+  }) : [];
+  const cursor = conversation.channel === "WHATSAPP" && before ? await prisma.whatsAppMessage.findFirst({
     where: { id: before, conversationId: id, workspaceId: context.workspaceId },
     select: { id: true, createdAt: true },
   }) : null;
-  const messages = await prisma.whatsAppMessage.findMany({
+  const messages = conversation.channel === "WHATSAPP" ? await prisma.whatsAppMessage.findMany({
     where: {
       conversationId: id, workspaceId: context.workspaceId,
       ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}),
@@ -125,9 +143,11 @@ export async function getConversationDetails(context: AuthorizationContext, id: 
       sentByMemberId: true, sentByUserId: true,
       attachments: { select: attachmentPreviewSelect, orderBy: { createdAt: "asc" } },
     },
-  });
+  }) : [];
   const page = messages.slice(0, 100);
-  const olderCursor = messages.length > 100 ? page.at(-1)?.id ?? null : null;
+  const olderCursor = conversation.channel === "EMAIL"
+    ? (emails.length > 100 ? emails[99].id : null)
+    : (messages.length > 100 ? page.at(-1)?.id ?? null : null);
   const actorIds = [...new Set(page.flatMap((message) => message.sentByMemberId ? [message.sentByMemberId] : []))];
   const actors = actorIds.length ? await prisma.workspaceMember.findMany({
     where: { id: { in: actorIds }, workspaceId: context.workspaceId },
@@ -136,6 +156,7 @@ export async function getConversationDetails(context: AuthorizationContext, id: 
   return {
     ...conversation,
     messages: page.reverse(),
+    emailMessages: emails.slice(0, 100).reverse(),
     olderCursor,
     actorLabels: Object.fromEntries(actors.map((actor) => [actor.id, actor.acceptedInvitations[0]?.email ?? null])),
   };
@@ -145,16 +166,20 @@ export async function markConversationRead(context: AuthorizationContext, id: st
   await requireInboxAccess(context);
   return prisma.$transaction(async (transaction) => {
     const conversation = await transaction.conversation.findFirst({
-      where: { id, ...getConversationScopeFilter(context) }, select: { id: true },
+      where: { id, ...getConversationScopeFilter(context) }, select: { id: true, channel: true },
     });
     if (!conversation) throw new ConversationNotFoundError();
-    const latest = await transaction.whatsAppMessage.findFirst({
+    const emailLatest = conversation.channel === "EMAIL" ? await transaction.emailMessage.findFirst({
+      where: { conversationId: id, workspaceId: context.workspaceId, direction: "INBOUND" },
+      orderBy: { receivedAt: "desc" }, select: { receivedAt: true },
+    }) : null;
+    const latest = conversation.channel === "WHATSAPP" ? await transaction.whatsAppMessage.findFirst({
       where: { conversationId: id, workspaceId: context.workspaceId, direction: "INBOUND" },
       orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
       select: { sentAt: true, createdAt: true },
-    });
-    if (!latest) return;
-    const lastReadAt = latest.sentAt ?? latest.createdAt;
+    }) : null;
+    const lastReadAt = emailLatest?.receivedAt ?? latest?.sentAt ?? latest?.createdAt;
+    if (!lastReadAt) return;
     await transaction.conversationReadState.upsert({
       where: { conversationId_memberId: { conversationId: id, memberId: context.memberId } },
       create: { conversationId: id, memberId: context.memberId, lastReadAt },
@@ -239,7 +264,8 @@ export async function getRecentConversationsForContact(context: AuthorizationCon
   return prisma.conversation.findMany({
     where: { clientId, ...getConversationScopeFilter(context) },
     orderBy: { lastMessageAt: "desc" }, take: 5,
-    select: { id: true, channel: true, lastMessageAt: true,
+    select: { id: true, channel: true, subject: true, lastMessageAt: true,
+      emailMessages: { orderBy: [{ receivedAt: "desc" }, { id: "desc" }], take: 1, select: { subject: true, textBody: true } },
       messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, select: { type: true, textBody: true, attachments: { take: 1, select: { caption: true } } } },
     },
   });

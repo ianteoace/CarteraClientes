@@ -3,6 +3,14 @@ export function maskWhatsAppParticipant(value: string) {
   return digits.length > 4 ? `+${digits.slice(0, 2)}••••${digits.slice(-4)}` : "WhatsApp";
 }
 
+export function conversationParticipant(channel: string, value: string) {
+  return channel === "EMAIL" ? value : maskWhatsAppParticipant(value);
+}
+
+export function emailConversationPreview(subject: string | null, snippet?: string | null) {
+  return `${subject || "Sin asunto"}${snippet?.trim() ? ` · ${snippet.replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
+}
+
 export function conversationPreview(message: { type: string; textBody: string | null; attachments?: { caption: string | null }[] } | null) {
   if (!message) return "Sin mensajes";
   if (message.type === "TEXT") return message.textBody?.slice(0, 80) || "Mensaje de texto";

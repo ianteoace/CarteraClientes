@@ -23,7 +23,7 @@ export function ArchiveControl({ conversationId, archived }: { conversationId: s
   return <div><button className="btn-secondary" disabled={busy} onClick={changeStatus} type="button">{archived ? "Reabrir" : "Archivar"}</button>{error ? <p className="mt-1 text-xs text-red-700" role="alert">{error}</p> : null}</div>;
 }
 
-export function ContactAssociation({ conversationId, participantId, displayName, contacts, groups, groupRequired, canLink, canCreate }: {
+export function ContactAssociation({ conversationId, participantId, displayName, contacts, groups, groupRequired, canLink, canCreate, channel = "WHATSAPP" }: {
   conversationId: string;
   participantId: string;
   displayName: string | null;
@@ -32,6 +32,7 @@ export function ContactAssociation({ conversationId, participantId, displayName,
   groupRequired: boolean;
   canLink: boolean;
   canCreate: boolean;
+  channel?: string;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"link" | "create" | null>(null);
@@ -64,9 +65,9 @@ export function ContactAssociation({ conversationId, participantId, displayName,
     </form> : null}
     {mode === "create" ? <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={submitCreate}>
       <label className="text-sm">Nombre<input className="field mt-1" defaultValue={displayName ?? ""} name="name" required /></label>
-      <label className="text-sm">Teléfono<input className="field mt-1" defaultValue={participantId ? `+${participantId}` : ""} name="phone" required /></label>
+      <label className="text-sm">Teléfono<input className="field mt-1" defaultValue={channel === "WHATSAPP" && participantId ? `+${participantId}` : ""} name="phone" required /></label>
       <label className="text-sm">Empresa<input className="field mt-1" name="company" /></label>
-      <label className="text-sm">Email<input className="field mt-1" name="email" type="email" /></label>
+      <label className="text-sm">Email<input className="field mt-1" defaultValue={channel === "EMAIL" ? participantId : ""} name="email" type="email" /></label>
       <label className="text-sm sm:col-span-2">Notas<textarea className="field mt-1 min-h-20" maxLength={5000} name="notes" /></label>
       {groups.length ? <fieldset className="sm:col-span-2"><legend className="text-sm">Grupos {groupRequired ? "(elegí al menos uno)" : "(opcional)"}</legend><div className="mt-2 flex flex-wrap gap-3">{groups.map((group) => <label className="text-sm" key={group.id}><input className="mr-2" name="groupIds" type="checkbox" value={group.id} />{group.name}</label>)}</div></fieldset> : null}
       <div className="sm:col-span-2"><button className="btn-primary" disabled={busy || (groupRequired && !groups.length)} type="submit">Guardar contacto</button></div>

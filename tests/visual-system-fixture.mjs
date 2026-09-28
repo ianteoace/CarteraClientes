@@ -1,5 +1,6 @@
 // Synthetic presentation fixtures only. No account, database, provider or network operations.
 const now = new Date('2026-09-28T12:30:00Z');
+const emailConversation = { id: 'visual-email', workspaceId: 'visual-workspace', channel: 'EMAIL', status: 'OPEN', clientId: null, client: null, externalParticipantId: 'maria@example.test', externalDisplayName: 'María Fernández', subject: 'Consulta de presupuesto y próximos pasos de la solicitud', lastMessageAt: now, lastInboundAt: now, messages: [], emailMessages: [{ id: 'visual-email-message', fromName: 'María Fernández', fromAddress: 'maria@example.test', subject: 'Consulta de presupuesto', textBody: 'Hola,\nquería consultar por un presupuesto.\n\n' + 'https://example.test/'.padEnd(700, 'a') + '\n\nMuchas gracias.', receivedAt: now, createdAt: now, attachmentCount: 1 }], olderCursor: null, actorLabels: {} };
 const contact = { id: 'visual-contact', name: 'María Fernández', phone: '+54 … 5678', email: 'maria@example.test' };
 const member = { id: 'visual-member', userId: 'visual-user', role: 'OWNER', groupScopeMode: 'ALL', groupAccess: [], permissionOverrides: [], acceptedInvitations: [], label: 'Equipo de atención', eligibleContactIds: [contact.id] };
 const ticket = { id: 'visual-ticket', number: 42, title: 'Revisar el acceso a la cuenta y confirmar los próximos pasos', description: 'La persona solicita revisar el acceso.\nConservar el contexto y confirmar la resolución con el equipo.', status: 'IN_PROGRESS', priority: 'HIGH', contactId: contact.id, contact, updatedAt: now, ticketDetails: { assignedMemberId: member.id, assignedMember: member, source: 'MANUAL', resolution: null }, ticketParticipants: [{ id: 'participant', memberId: member.id, member, memberUserId: member.userId }], ticketNotes: [{ id: 'note', body: 'Confirmar disponibilidad por la tarde. Esta nota es interna.', authorMember: member, createdAt: now }] };
@@ -19,6 +20,13 @@ export const fixture = {
   hasPermission: () => true, hasAllGroups: () => true,
   getWorkspaceModules: () => Object.fromEntries(['CAMPAIGNS', 'TICKETS', 'INCIDENTS', 'ORDERS', 'INBOX'].map((key) => [key, true])),
   isModuleEnabled: () => true,
+  getEmailConnections: () => [{ id: 'visual-email-connection', address: 'soporte@example.test', displayName: 'Soporte', provider: 'RESEND', status: 'ACTIVE' }],
+  getConversationDetails: () => emailConversation,
+  listConversations: () => ({ items: [{ ...emailConversation, unread: true, lastMessage: null, emailPreview: { subject: emailConversation.subject, snippet: 'Hola, quería consultar por un presupuesto.' } }, { ...emailConversation, id: 'visual-whatsapp', channel: 'WHATSAPP', externalParticipantId: 'qa-whatsapp', externalDisplayName: 'Juan Pérez', unread: false, lastMessage: { type: 'TEXT', textBody: 'Quería consultar el estado de mi solicitud.' }, emailPreview: null }], nextCursor: null }),
+  listLinkableClients: () => [{ id: 'visual-contact', name: 'María Fernández', phone: '+54 … 5678', company: 'Empresa' }],
+  listGroups: () => [{ id: 'visual-group', name: 'Clientes comerciales' }],
+  markConversationRead: () => undefined,
+  listConversationCases: () => [],
   getTicket: () => ticket, listTickets: () => result([ticket, { ...ticket, id: 't2', number: 43, status: 'RESOLVED', priority: 'NORMAL' }]),
   getTicketTimeline: () => [activity], getEligibleTicketMembers: () => [member], getTicketFormOptions: () => ({ contacts: [contact], members: [member] }),
   ticketMemberLabel: () => 'Equipo de atención',

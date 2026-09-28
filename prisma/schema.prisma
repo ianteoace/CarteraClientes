@@ -51,6 +51,9 @@ model Workspace {
   whatsappWebhookEvents WhatsAppWebhookEvent[]
   conversations         Conversation[]
   caseConversations     CaseConversation[]
+  emailConnections      EmailConnection[]
+  emailMessages         EmailMessage[]
+  emailWebhookEvents    EmailWebhookEvent[]
 }
 
 model WorkspaceModule {
@@ -623,6 +626,9 @@ model Conversation {
   channel               String                  @default("WHATSAPP")
   clientId              String?
   whatsappConnectionId  String?
+  emailConnectionId     String?
+  externalThreadId      String?
+  subject               String?
   externalParticipantId String
   externalDisplayName   String?
   status                String                  @default("OPEN")
@@ -637,11 +643,80 @@ model Conversation {
   messages              WhatsAppMessage[]
   readStates            ConversationReadState[]
   cases                 CaseConversation[]
+  emailConnection       EmailConnection?        @relation(fields: [emailConnectionId, workspaceId], references: [id, workspaceId], onDelete: NoAction)
+  emailMessages         EmailMessage[]
 
   @@unique([workspaceId, whatsappConnectionId, externalParticipantId])
   @@unique([id, workspaceId])
+  @@unique([workspaceId, emailConnectionId, externalThreadId])
   @@index([workspaceId, lastMessageAt, id])
   @@index([workspaceId, clientId])
+}
+
+model EmailConnection {
+  id                   String         @id @default(cuid())
+  workspaceId          String
+  provider             String
+  address              String
+  displayName          String?
+  status               String         @default("ACTIVE")
+  providerConnectionId String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations        Conversation[]
+  messages             EmailMessage[]
+
+  @@unique([provider, address])
+  @@unique([id, workspaceId])
+  @@index([workspaceId])
+}
+
+model EmailMessage {
+  id                String          @id @default(cuid())
+  workspaceId       String
+  conversationId    String
+  emailConnectionId String
+  providerMessageId String
+  internetMessageId String?
+  inReplyTo         String?
+  references        Json
+  direction         String          @default("INBOUND")
+  fromAddress       String
+  fromName          String?
+  toAddresses       Json
+  ccAddresses       Json
+  subject           String
+  textBody          String?         @db.Text
+  htmlBody          String?         @db.Text
+  attachmentCount   Int             @default(0)
+  receivedAt        DateTime
+  createdAt         DateTime        @default(now())
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation      Conversation    @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  emailConnection   EmailConnection @relation(fields: [emailConnectionId, workspaceId], references: [id, workspaceId], onDelete: NoAction)
+
+  @@unique([emailConnectionId, providerMessageId])
+  @@unique([emailConnectionId, internetMessageId])
+  @@index([workspaceId, fromAddress])
+  @@index([conversationId, receivedAt, id])
+}
+
+model EmailWebhookEvent {
+  id                String     @id @default(cuid())
+  provider          String
+  eventKey          String     @unique
+  eventType         String
+  providerMessageId String?
+  workspaceId       String?
+  receivedAt        DateTime   @default(now())
+  processedAt       DateTime?
+  processingError   String?
+  payload           Json
+  workspace         Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, receivedAt])
+  @@index([provider, providerMessageId])
 }
 
 model CaseConversation {

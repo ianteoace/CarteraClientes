@@ -4,6 +4,7 @@ import { WorkspacePermission } from "@prisma/client";
 
 import { ArchiveControl, ContactAssociation } from "@/components/inbox/conversation-controls";
 import { ConversationList } from "@/components/inbox/conversation-list";
+import { EmailThread } from "@/components/inbox/email-thread";
 import { ReplyComposer } from "@/components/inbox/reply-composer";
 import { ConversationImage } from "@/components/inbox/conversation-image";
 import { MessageSelectionActions, MessageSelectionProvider, SelectableMessage } from "@/components/inbox/message-selection";
@@ -47,9 +48,10 @@ export default async function ConversationPage({ params, searchParams }: {
   const [contacts, groups, relatedCases, conversationPage] = await Promise.all([
     !conversation.clientId && canLink ? listLinkableClients(context, linkSearch) : Promise.resolve([]),
     !conversation.clientId && canCreate && hasPermission(context, WorkspacePermission.GROUP_VIEW) ? listGroups(context) : Promise.resolve([]),
-    listConversationCases(context, conversation.id),
+    conversation.channel === "WHATSAPP" ? listConversationCases(context, conversation.id) : Promise.resolve([]),
     listConversations(context, {}),
   ]);
+  if (conversation.channel === "EMAIL") return <main className="app-page inbox-page"><div className="inbox-frame"><ConversationList page={conversationPage} selectedId={conversation.id} /><EmailThread conversation={conversation} canManage={canManage} canLink={canLink} canCreate={canCreate} canViewContact={hasPermission(context, WorkspacePermission.CONTACT_VIEW)} groupRequired={!hasAllGroups(context)} linkSearch={linkSearch} contacts={contacts} groups={groups} /></div></main>;
   const name = conversation.client?.name ?? conversation.externalDisplayName ?? maskWhatsAppParticipant(conversation.externalParticipantId);
   return <main className="app-page inbox-page"><div className="inbox-frame"><ConversationList page={conversationPage} selectedId={conversation.id} /><div className="inbox-thread"><MessageSelectionProvider key={conversation.id}><div className="inbox-thread-header-wrap">
     <Link className="inbox-back-link text-xs font-semibold text-muted hover:text-foreground lg:hidden" href="/bandeja">← Volver a Bandeja</Link>
