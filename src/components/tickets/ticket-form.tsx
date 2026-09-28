@@ -47,7 +47,7 @@ export function TicketForm({ contacts, members, initialContactId, origin }: {
     }
   }
 
-  return <form className="mt-7 max-w-3xl space-y-7" onSubmit={submit}>
+  return <form className="module-form space-y-6" onSubmit={submit}>
     {origin ? <><input type="hidden" name="conversationId" value={origin.conversationId} />{origin.sourceMessageIds.map((id) => <input key={id} type="hidden" name="sourceMessageIds" value={id} />)}<input type="hidden" name="contactId" value={initialContactId ?? ""} /></> : null}
     <section className="border-y border-border py-5">
       {origin ? <p className="mb-3 text-sm text-muted">Se vinculará con la conversación de WhatsApp. El contacto está fijado para esta operación.</p> : null}

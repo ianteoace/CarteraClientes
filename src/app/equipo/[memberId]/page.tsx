@@ -1,5 +1,7 @@
 import { WorkspacePermission, WorkspaceRole } from "@prisma/client";
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
 import { notFound, redirect } from "next/navigation";
 
 import { MemberEditor } from "@/components/team/member-editor";
@@ -57,12 +59,13 @@ export default async function MemberPage({ params, searchParams }: { params: Pro
   const identity = member.userId === user.id ? (user.name?.trim() || user.email) : (invitedEmail || `Usuario ${member.userId.slice(0, 8)}…`);
   const metrics = metricsResult?.member;
 
-  return <main className="app-page max-w-5xl">
+  return <main className="app-page module-page">
     <Link href={`/equipo?period=${period}`} className="mb-5 inline-block text-sm text-muted hover:text-foreground">← Volver a Equipo</Link>
-    <div className="mb-8 border-b border-border pb-5"><p className="eyebrow">Miembro del equipo</p><h1 className="page-heading break-words">{identity}</h1>{member.userId === user.id ? <p className="page-description">{user.email} · Vos</p> : invitedEmail ? <p className="page-description">{invitedEmail}</p> : null}</div>
+    <PageHeader eyebrow="Miembro del equipo" title={identity} metadata={member.userId === user.id ? user.email + " · Vos" : invitedEmail} />
 
-    {metricsResult && metrics ? <section className="mb-10 border-b border-border pb-8" aria-labelledby="member-metrics-heading">
-      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">Actividad del equipo</p><h2 className="text-xl font-semibold tracking-tight" id="member-metrics-heading">Resumen operacional</h2></div><nav className="flex flex-wrap gap-2" aria-label="Período de métricas">{(Object.keys(METRICS_PERIOD) as Array<keyof typeof METRICS_PERIOD>).map((value) => <Link className={value === period ? "btn-primary" : "btn-secondary"} href={`/equipo/${member.id}?period=${value}`} key={value}>{METRICS_PERIOD[value]} días</Link>)}</nav></div>
+    <div className="mt-6"><MemberEditor memberId={member.id} role={member.role} actorRole={context.role} actorHasAllGroups={context.role === WorkspaceRole.OWNER || context.groupScopeMode === "ALL"} actorPermissions={ALL_PERMISSIONS.filter((permission) => context.permissions.has(permission))} canManageRole={canManageRole} canManagePermissions={canManagePermissions} effectivePermissions={ALL_PERMISSIONS.filter((permission) => effective.has(permission))} overridePermissions={member.permissionOverrides.map((item) => item.permission)} scopeMode={member.role === WorkspaceRole.OWNER ? "ALL" : member.groupScopeMode} selectedGroupIds={member.groupAccess.map((item) => item.groupId)} groups={groups} disabledModules={Object.values(WORKSPACE_MODULE).filter((key) => !isModuleEnabled(modules, key))} /></div>
+    {metricsResult && metrics ? <section className="mt-7 border-b border-border pb-6" aria-labelledby="member-metrics-heading">
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">Actividad del equipo</p><div id="member-metrics-heading"><SectionHeader title="Métricas · resumen operacional" /></div></div><nav className="module-tabs" aria-label="Período de métricas">{(Object.keys(METRICS_PERIOD) as Array<keyof typeof METRICS_PERIOD>).map((value) => <Link className="module-tab" aria-current={value === period ? "page" : undefined} href={`/equipo/${member.id}?period=${value}`} key={value}>{METRICS_PERIOD[value]} días</Link>)}</nav></div>
       <h3 className="eyebrow mt-7">Carga actual</h3><dl className={`mt-3 grid border-y border-border ${metricsResult.ticketsAvailable && metricsResult.incidentsAvailable ? "sm:grid-cols-2" : "sm:grid-cols-1"}`}>{metricsResult.ticketsAvailable ? <div className="py-4 sm:pr-6"><dt className="text-sm text-muted">Tickets abiertos</dt><dd className="mt-1 text-2xl font-semibold">{metrics.current.openTickets}</dd></div> : null}{metricsResult.incidentsAvailable ? <div className="border-t border-border py-4 sm:border-l sm:border-t-0 sm:pl-6"><dt className="text-sm text-muted">Incidencias abiertas</dt><dd className="mt-1 text-2xl font-semibold">{metrics.current.openIncidents}</dd></div> : null}</dl>
       <h3 className="eyebrow mt-7">Actividad · últimos {metricsResult.days} días</h3><dl className="mt-3 divide-y divide-border border-y border-border">{[
         ...(metricsResult.ticketsAvailable ? [["Tickets resueltos", metrics.period.resolvedTickets]] : []),
@@ -76,6 +79,6 @@ export default async function MemberPage({ params, searchParams }: { params: Pro
       <h3 className="eyebrow mt-7">Trabajo reciente</h3><div className="mt-3 divide-y divide-border border-y border-border">{recentWork?.length ? recentWork.map((item) => { const status = item.type === "TICKET" ? TICKET_STATUS_LABELS[item.status as keyof typeof TICKET_STATUS_LABELS] ?? item.status : INCIDENT_STATUS_LABELS[item.status as keyof typeof INCIDENT_STATUS_LABELS] ?? item.status; return <Link className="grid gap-1 py-4 transition-colors hover:bg-surface sm:grid-cols-[7rem_minmax(0,1fr)_9rem_8rem] sm:items-center sm:gap-4" href={item.href} key={item.id}><span className="text-xs font-bold uppercase tracking-wide text-muted">{item.type === "TICKET" ? "Ticket" : "Incidencia"} #{item.number}</span><span className="truncate text-sm font-semibold">{item.title}</span><span className="text-sm text-muted">{status} · {WORK_ROLE_LABELS[item.role]}</span><time className="text-xs text-muted sm:text-right">{relativeTime(item.latestActivityAt, now)}</time></Link>; }) : <p className="py-4 text-sm text-muted">Sin trabajo reciente para este período.</p>}</div>
     </section> : null}
 
-    <MemberEditor memberId={member.id} role={member.role} actorRole={context.role} actorHasAllGroups={context.role === WorkspaceRole.OWNER || context.groupScopeMode === "ALL"} actorPermissions={ALL_PERMISSIONS.filter((permission) => context.permissions.has(permission))} canManageRole={canManageRole} canManagePermissions={canManagePermissions} effectivePermissions={ALL_PERMISSIONS.filter((permission) => effective.has(permission))} overridePermissions={member.permissionOverrides.map((item) => item.permission)} scopeMode={member.role === WorkspaceRole.OWNER ? "ALL" : member.groupScopeMode} selectedGroupIds={member.groupAccess.map((item) => item.groupId)} groups={groups} disabledModules={Object.values(WORKSPACE_MODULE).filter((key) => !isModuleEnabled(modules, key))} />
+
   </main>;
 }

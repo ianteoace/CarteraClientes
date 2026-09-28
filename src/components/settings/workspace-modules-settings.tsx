@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { SectionHeader } from "@/components/ui/section-header";
 
 import { updateWorkspaceModuleAction } from "@/app/configuracion/actions";
 import {
@@ -39,28 +40,29 @@ export function WorkspaceModulesSettings({ initialModules, canEdit }: Props) {
     });
   }
 
-  return <section className="border-y border-border py-6" aria-labelledby="workspace-modules-heading">
+  return <section className="settings-section" aria-labelledby="workspace-modules-heading">
     <div>
-      <h2 className="text-xl font-semibold" id="workspace-modules-heading">Módulos</h2>
-      <p className="mt-1 text-sm text-muted">Elegí qué áreas operativas están disponibles en esta cartera.</p>
+      <div id="workspace-modules-heading"><SectionHeader title="Módulos" /></div>
+      <p className="mt-1 text-xs leading-5 text-muted">Elegí qué áreas operativas están disponibles en esta cartera.</p>
     </div>
     {notice ? <p className={notice.success ? "notice-success mt-4" : "notice-error mt-4"} role="status">{notice.message}</p> : null}
     <div className="mt-5 divide-y divide-border border-y border-border">
       {KNOWN_MODULES.map((key) => {
         const available = (AVAILABLE_MODULES as readonly WorkspaceModuleKey[]).includes(key);
         const enabled = modules[key];
-        return <div className="flex min-h-20 items-center justify-between gap-5 py-4" key={key}>
+        return <div className={enabled ? "flex items-center justify-between gap-4 py-3" : "flex items-center justify-between gap-4 py-3 text-muted"} key={key}>
           <div>
             <h3 className="font-semibold">{WORKSPACE_MODULE_DETAILS[key].label}</h3>
             <p className="mt-1 text-sm text-muted">{WORKSPACE_MODULE_DETAILS[key].description}</p>
           </div>
           {available ? <button
             aria-pressed={enabled}
-            className={enabled ? "btn-primary shrink-0" : "btn-secondary shrink-0"}
+            className="module-switch"
+            aria-label={WORKSPACE_MODULE_DETAILS[key].label}
             disabled={!canEdit || pending}
             onClick={() => toggle(key)}
             type="button"
-          >{enabled ? "Activado" : "Desactivado"}</button> : <span className="badge-neutral shrink-0">Próximamente</span>}
+          ><span className="module-switch-track" aria-hidden="true" /><span>{enabled ? "Activado" : "Desactivado"}</span></button> : <span className="badge-neutral shrink-0">Próximamente</span>}
         </div>;
       })}
     </div>

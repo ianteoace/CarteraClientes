@@ -25,7 +25,7 @@ export function IncidentForm({ members }: { members: MemberOption[] }) {
     router.refresh();
   }
 
-  return <form className="mt-7 max-w-3xl space-y-7" onSubmit={submit}>
+  return <form className="module-form space-y-6" onSubmit={submit}>
     <div className="grid gap-5 sm:grid-cols-2">
       <label className="field-label sm:col-span-2">Título *<input className="field mt-1" name="title" required maxLength={200} /></label>
       <label className="field-label sm:col-span-2">Descripción<textarea className="field mt-1 min-h-32" name="description" maxLength={10000} /></label>

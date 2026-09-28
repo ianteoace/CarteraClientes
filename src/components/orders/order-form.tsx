@@ -37,7 +37,7 @@ export function OrderForm({ contacts, initialContactId, origin }: { contacts: Co
     } finally { submittingRef.current = false; setPending(false); }
   }
 
-  return <form className="mt-7 max-w-4xl space-y-8" onSubmit={submit}>
+  return <form className="module-form space-y-6" onSubmit={submit}>
     {origin ? <><input type="hidden" name="conversationId" value={origin.conversationId} />{origin.sourceMessageIds.map((id) => <input key={id} type="hidden" name="sourceMessageIds" value={id} />)}<input type="hidden" name="contactId" value={initialContactId ?? ""} /></> : null}
     <section className="grid gap-4 border-y border-border py-5 sm:grid-cols-2">
       {origin ? <p className="sm:col-span-2 text-sm text-muted">Se vinculará con la conversación de WhatsApp. Cargá los ítems manualmente.</p> : <label className="field-label sm:col-span-2">Buscar contacto<input className="field mt-1" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, teléfono o email" /></label>}

@@ -2,6 +2,9 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
 
 import {
   createCampaignAction,
@@ -74,21 +77,16 @@ export function CampaignForm({ groups, manual = false }: CampaignFormProps) {
   }
 
   return (
-    <form className="app-page max-w-3xl space-y-6" onSubmit={handleSubmit}>
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Nueva campaña</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          Prepará una campaña sin enviar mensajes todavía.
-        </p>
-      </div>
+    <form className="app-page module-page max-w-4xl space-y-5" onSubmit={handleSubmit}>
+      <Link className="text-xs font-semibold text-muted" href="/campanas">← Volver a Campañas</Link><PageHeader eyebrow="Comunicación" title="Nueva campaña" description="Prepará una campaña sin enviar mensajes todavía." />
 
-      <label className="block space-y-1 text-sm font-medium">
+      <label className="field-label">
         <span>Nombre de campaña</span>
         <input className="field" name="name" required />
       </label>
       {manual ? <p className="rounded-md bg-zinc-100 px-3 py-2 text-sm">Destinatarios: selección manual</p> : null}
 
-      {!manual ? <label className="block space-y-1 text-sm font-medium">
+      {!manual ? <label className="field-label">
         <span>Grupo</span>
         <select
           className="field"
@@ -105,7 +103,7 @@ export function CampaignForm({ groups, manual = false }: CampaignFormProps) {
         </select>
       </label> : null}
 
-      <label className="block space-y-1 text-sm font-medium">
+      <label className="field-label">
         <span>Mensaje</span>
         <textarea
           className="field min-h-36"
@@ -120,23 +118,23 @@ export function CampaignForm({ groups, manual = false }: CampaignFormProps) {
       {isLoadingAudience ? <p className="text-sm text-zinc-600">Cargando destinatarios…</p> : null}
 
       {audience ? (
-        <section className="surface-muted space-y-4 p-5">
+        <section className="space-y-4 border-y border-border py-5">
           <div>
-            <h2 className="font-semibold">Audiencia prevista</h2>
+            <SectionHeader title="Audiencia prevista" />
             <p className="mt-1 text-sm text-zinc-600">
-              {audience.memberCount} miembros · {audience.eligibleCount} aptos · {audience.memberCount - audience.eligibleCount} excluidos sin opt-in
+              {audience.memberCount} miembros · {audience.eligibleCount} aptos · {audience.memberCount - audience.eligibleCount} sin autorización
             </p>
           </div>
 
           {audience.eligibleCount === 0 ? (
             <p className="text-sm text-red-700">
-              No hay clientes con opt-in habilitado en este grupo.
+              No hay contactos autorizados para campañas en este grupo.
             </p>
           ) : (
             <div className="space-y-3">
               <p className="text-sm font-medium">Vista previa de destinatarios aptos</p>
               {audience.clients.slice(0, 3).map((client) => (
-                <div className="rounded-md bg-white p-3 text-sm" key={client.id}>
+                <div className="border-b border-border py-3 text-sm" key={client.id}>
                   <p className="font-medium">{client.name}</p>
                   <p className="text-zinc-600">{client.phone}{client.company ? ` · ${client.company}` : ""}</p>
                   <p className="mt-2 whitespace-pre-wrap text-zinc-700">
@@ -150,7 +148,7 @@ export function CampaignForm({ groups, manual = false }: CampaignFormProps) {
       ) : null}
 
       {error ? (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+        <p className="notice-error" role="alert">
           {error}
         </p>
       ) : null}

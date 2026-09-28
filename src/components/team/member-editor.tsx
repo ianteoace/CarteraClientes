@@ -2,6 +2,7 @@
 
 import { GroupScopeMode, WorkspacePermission, WorkspaceRole } from "@prisma/client";
 import { useState, useTransition } from "react";
+import { SectionHeader } from "@/components/ui/section-header";
 
 import {
   changeMemberRoleAction, resetMemberPermissionsAction,
@@ -53,13 +54,13 @@ export function MemberEditor({
     });
   }
 
-  return <div className="space-y-9">
+  return <div className="space-y-6">
     {notice ? <p role="status" className={notice.success ? "notice-success" : "notice-error"}>
       {notice.success ? "Cambios guardados." : notice.error}
     </p> : null}
 
-    <section className="border-b border-border pb-8" aria-labelledby="team-role-heading">
-      <h2 id="team-role-heading" className="text-lg font-semibold">Rol</h2>
+    <section className="border-b border-border pb-6" aria-labelledby="team-role-heading">
+      <div id="team-role-heading"><SectionHeader title="Perfil / rol" /></div>
       <p className="mt-1 text-sm text-muted">El rol define los permisos predeterminados del miembro.</p>
       {canManageRole ? <div className="mt-4 max-w-sm">
         <label className="field-label" htmlFor="team-role">Rol del miembro</label>
@@ -77,10 +78,10 @@ export function MemberEditor({
       {overrideSet.size > 0 ? <p className="mt-2 text-xs text-muted">{overrideSet.size} {overrideSet.size === 1 ? "permiso personalizado" : "permisos personalizados"}</p> : null}
     </section>
 
-    <section className="border-b border-border pb-8" aria-labelledby="team-permissions-heading">
+    <section className="border-b border-border pb-6" aria-labelledby="team-permissions-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 id="team-permissions-heading" className="text-lg font-semibold">Permisos</h2>
+          <div id="team-permissions-heading"><SectionHeader title="Permisos por módulo" /></div>
           <p className="mt-1 text-sm text-muted">Permisos efectivos de este miembro.</p>
         </div>
         {canManagePermissions && overrideSet.size > 0 ? <button
@@ -102,7 +103,7 @@ export function MemberEditor({
               const cannotGrant = !checked && actorRole !== WorkspaceRole.OWNER && !actorSet.has(permission);
               const permissionModule = getPermissionModule(permission);
               const moduleDisabled = permissionModule ? disabledModules.includes(permissionModule) : false;
-              return <label key={permission} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
+              return <label key={permission} className="permission-row flex items-center justify-between gap-3 py-2">
                 <span>{label}<span className="ml-2 text-xs text-muted">{moduleDisabled && permissionModule ? `${WORKSPACE_MODULE_DETAILS[permissionModule].label} — módulo desactivado` : customized ? "Personalizado" : "Predeterminado"}</span></span>
                 <input
                   type="checkbox" className="h-5 w-5 shrink-0 accent-black"
@@ -119,7 +120,7 @@ export function MemberEditor({
     </section>
 
     <section aria-labelledby="team-scope-heading">
-      <h2 id="team-scope-heading" className="text-lg font-semibold">Acceso a contactos y grupos</h2>
+      <div id="team-scope-heading"><SectionHeader title="Alcance · contactos y grupos" /></div>
       <p className="mt-1 text-sm text-muted">{owner ? "El Owner accede a todos los grupos." : "Definí qué grupos puede consultar este miembro."}</p>
       {canManagePermissions ? <div className="mt-4 space-y-3">
         <label className="flex min-h-11 items-center gap-3 text-sm">

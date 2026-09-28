@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionHeader } from "@/components/ui/section-header";
 import { ConversationImage } from "@/components/inbox/conversation-image";
 import type { AttachmentPreview } from "@/lib/whatsapp/attachment-types";
 import { isEligibleCaseSourceMessage } from "@/lib/case-source-message";
@@ -12,9 +13,9 @@ type Origin = {
 export function CaseOrigin({ origins }: { origins: Origin[] }) {
   if (!origins.length) return null;
   return <section className="mt-8 border-t border-border pt-6">
-    <h2 className="eyebrow">Origen</h2>
+    <SectionHeader title="Origen · WhatsApp" />
     <div className="mt-3 divide-y divide-border border-y border-border">{origins.map((origin) => <div className="py-3" key={origin.id}>
-      <p className="text-sm font-semibold">WhatsApp · {origin.conversation.client?.name ?? origin.conversation.externalDisplayName ?? "Conversación"}</p>
+      <p className="inbox-channel-label text-sm font-semibold">WhatsApp · {origin.conversation.client?.name ?? origin.conversation.externalDisplayName ?? "Conversación"}</p>
       <Link className="mt-1 inline-block text-sm underline underline-offset-2" href={`/bandeja/${origin.conversation.id}`}>Abrir conversación</Link>
       {origin.sourceMessages.length ? <details className="mt-3 text-sm">
         <summary className="cursor-pointer font-medium">{origin.sourceMessages.length} {origin.sourceMessages.length === 1 ? "mensaje de origen" : "mensajes de origen"}</summary>

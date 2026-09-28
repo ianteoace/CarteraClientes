@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 
 import { getCurrentUser } from "@/lib/auth/server";
 import { getAuthorizationContext } from "@/lib/authorization";
@@ -31,17 +32,15 @@ export default async function ActivityPage({ searchParams }: PageProps<"/activid
   const requestedPage = typeof query.pagina === "string" ? Number(query.pagina) : 1;
   const result = await listWorkspaceActivity(context, filter, requestedPage);
 
-  return <main className="app-page">
-    <p className="eyebrow">Auditoría</p>
-    <h1 className="page-heading">Actividad</h1>
-    <p className="page-description">Acciones relevantes realizadas dentro de esta cartera.</p>
-    <nav aria-label="Filtrar actividad" className="mt-7 flex flex-wrap gap-2 border-b border-border pb-4">
-      {(Object.keys(ACTIVITY_FILTERS) as ActivityFilter[]).map((key) => <Link className={key === filter ? "btn-primary" : "btn-secondary"} href={pageHref(key)} key={key}>{FILTER_LABELS[key]}</Link>)}
+  return <main className="app-page module-page">
+    <PageHeader eyebrow="Auditoría" title="Actividad" description="Acciones relevantes realizadas dentro de esta cartera." />
+    <nav aria-label="Filtrar actividad" className="module-tabs mt-5">
+      {(Object.keys(ACTIVITY_FILTERS) as ActivityFilter[]).map((key) => <Link className="module-tab" aria-current={key === filter ? "page" : undefined} href={pageHref(key)} key={key}>{FILTER_LABELS[key]}</Link>)}
     </nav>
-    {result.items.length ? <div className="divide-y divide-border border-b border-border">
+    {result.items.length ? <div className="editorial-timeline mt-3 border-b border-border">
       {result.items.map((activity) => {
         const actor = activity.actorUserId === user?.id ? (user.name?.trim() || user.email) : activity.actorMember?.acceptedInvitations[0]?.email || (activity.actorUserId ? `Usuario ${activity.actorUserId.slice(0, 8)}…` : "Sistema");
-        return <article className="grid gap-1 py-4 sm:grid-cols-[minmax(9rem,0.35fr)_minmax(0,1fr)_auto] sm:items-baseline sm:gap-5" key={activity.id}>
+        return <article className="grid gap-1 py-4 lg:grid-cols-[minmax(0,.35fr)_minmax(0,1fr)_auto] sm:items-baseline sm:gap-5" key={activity.id}>
           <p className="truncate text-sm font-semibold">{actor}</p>
           <div className="min-w-0"><p className="text-sm leading-6">{describeActivity(activity.action, activity.metadata)}</p><p className="mt-0.5 text-xs text-muted">{activityEntityLabel(activity.entityType, activity.metadata)}</p></div>
           <time className="text-xs text-muted" dateTime={activity.createdAt.toISOString()}>{activity.createdAt.toLocaleString("es-AR", { dateStyle: "medium", timeStyle: "short" })}</time>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
 import { notFound } from "next/navigation";
 import { WorkspacePermission } from "@prisma/client";
 
@@ -26,9 +27,9 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
     try { origin = await getConversationCaseCreationContext(context, CASE_TYPE.ORDER, { conversationId, sourceMessageIds }); }
     catch (error) { if (error instanceof CaseConversationValidationError) notFound(); throw error; }
     if (!origin) notFound();
-    if (origin.contactMissing) return <main className="app-page"><Link href={`/bandeja/${conversationId}`} className="text-sm font-semibold text-muted hover:text-foreground">← Volver a la conversación</Link><h1 className="page-heading mt-7">Nuevo pedido</h1><p className="empty-state mt-7">Vinculá o creá un contacto para generar operaciones desde esta conversación.</p></main>;
+    if (origin.contactMissing) return <main className="app-page module-page"><Link href={`/bandeja/${conversationId}`} className="text-sm font-semibold text-muted hover:text-foreground">← Volver a la conversación</Link><h1 className="page-heading mt-7">Nuevo pedido</h1><p className="empty-state mt-7">Vinculá o creá un contacto para generar operaciones desde esta conversación.</p></main>;
   }
   const requestedContactId = typeof query.contactId === "string" ? query.contactId : undefined;
   const initialContactId = origin ? origin.conversation.clientId ?? undefined : contacts.some(({ id }) => id === requestedContactId) ? requestedContactId : undefined;
-  return <main className="app-page"><Link className="text-sm font-semibold text-muted hover:text-foreground" href={origin ? `/bandeja/${origin.conversation.id}` : "/pedidos"}>← {origin ? "Volver a la conversación" : "Volver a Pedidos"}</Link><p className="eyebrow mt-7">Carga manual</p><h1 className="page-heading">Nuevo pedido</h1><p className="page-description">Guardá un borrador asociado a un contacto visible en tu alcance.</p>{origin ? <CaseSourcePreview messages={origin.sourceMessages} /> : null}{contacts.length ? <OrderForm contacts={contacts} initialContactId={initialContactId} origin={origin ? { conversationId: origin.conversation.id, sourceMessageIds: origin.sourceMessages.map((message) => message.id) } : undefined} /> : <p className="empty-state mt-7">No hay contactos visibles para crear un pedido.</p>}</main>;
+  return <main className="app-page module-page"><Link className="text-sm font-semibold text-muted hover:text-foreground" href={origin ? `/bandeja/${origin.conversation.id}` : "/pedidos"}>← {origin ? "Volver a la conversación" : "Volver a Pedidos"}</Link><div className="mt-5"><PageHeader eyebrow="Carga manual" title="Nuevo pedido" description="Guardá un borrador asociado a un contacto visible en tu alcance." /></div>{origin ? <CaseSourcePreview messages={origin.sourceMessages} /> : null}{contacts.length ? <OrderForm contacts={contacts} initialContactId={initialContactId} origin={origin ? { conversationId: origin.conversation.id, sourceMessageIds: origin.sourceMessages.map((message) => message.id) } : undefined} /> : <p className="empty-state mt-7">No hay contactos visibles para crear un pedido.</p>}</main>;
 }
